@@ -134,7 +134,6 @@ typedef struct temporal_field_s
 
 temporal_field_t ERA()
 {
-
     temporal_field_t t;
 
     t.name = "Era";
@@ -365,9 +364,6 @@ void parsePattern(lua_State *L, const char *pattern)
             }
             // char *str = pattern.substring(start + 1, pos);
             int n = pos - (start + 1);
-            char *str = (char *)malloc(sizeof(char) * (n + 1));
-            strncpy(str, pattern + (start + 1), n);
-            str[n] = '\0';
 
             if (n < 1) // str.isEmpty()
             {
@@ -375,6 +371,10 @@ void parsePattern(lua_State *L, const char *pattern)
             }
             else
             {
+                char *str = (char *)malloc(sizeof(char) * (n + 1));
+                strncpy(str, pattern + (start + 1), n);
+                str[n] = '\0';
+                
                 // str.replace("''", "'")
                 lua_pushvalue(L, 2); // duplicate the given function for replacing.
                 lua_pushstring(L, str);
@@ -384,6 +384,8 @@ void parsePattern(lua_State *L, const char *pattern)
                 const char *replaced = lua_tostring(L, -1);
                 lua_pop(L, 1);
                 appendLiteral(replaced);
+
+                free(str);
             }
         }
         else if (cur == '[')
