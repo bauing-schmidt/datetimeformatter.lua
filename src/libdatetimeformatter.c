@@ -12,6 +12,35 @@
 #define Long_MAX_VALUE 0x7fffffffffffffffL
 #define NANOS_PER_SECOND 1000000000L
 
+#define TAG_QUOTE_ASCII_CHAR 100
+#define TAG_QUOTE_CHARS 101
+
+#define PATTERN_ERA 0
+#define PATTERN_YEAR 1
+#define PATTERN_MONTH 2
+#define PATTERN_DAY_OF_MONTH 3
+#define PATTERN_HOUR_OF_DAY1 4
+#define PATTERN_HOUR_OF_DAY0 5
+#define PATTERN_MINUTE 6
+#define PATTERN_SECOND 7
+#define PATTERN_MILLISECOND 8
+#define PATTERN_DAY_OF_WEEK 9
+#define PATTERN_DAY_OF_YEAR 10
+#define PATTERN_DAY_OF_WEEK_IN_MONTH 11
+#define PATTERN_WEEK_OF_YEAR 12
+#define PATTERN_WEEK_OF_MONTH 13
+#define PATTERN_AM_PM 14
+#define PATTERN_HOUR1 15
+#define PATTERN_HOUR0 16
+#define PATTERN_ZONE_NAME 17
+#define PATTERN_ZONE_VALUE 18
+#define PATTERN_WEEK_YEAR 19
+#define PATTERN_ISO_DAY_OF_WEEK 20
+#define PATTERN_ISO_ZONE 21
+#define PATTERN_MONTH_STANDALONE 22
+
+static const char *patternChars = "GyMdkHmsSEDFwWahKzZYuXL";
+
 char *replace_consecutive_quotes(char *orig)
 {
     int n = strlen(orig);
@@ -35,31 +64,6 @@ char *replace_consecutive_quotes(char *orig)
 
     return replaced;
 }
-
-char **PATTERNS = {
-    "+HH",
-    "+HHmm",
-    "+HH:mm",
-    "+HHMM",
-    "+HH:MM",
-    "+HHMMss",
-    "+HH:MM:ss",
-    "+HHMMSS",
-    "+HH:MM:SS",
-    "+HHmmss",
-    "+HH:mm:ss",
-    "+H",
-    "+Hmm",
-    "+H:mm",
-    "+HMM",
-    "+H:MM",
-    "+HMMss",
-    "+H:MM:ss",
-    "+HMMSS",
-    "+H:MM:SS",
-    "+Hmmss",
-    "+H:mm:ss",
-};
 
 typedef struct timespec timespec_t;
 typedef struct tm tm_t;
@@ -830,485 +834,225 @@ typedef struct DateTimeFormatterBuilder_s
     int optional;
 } DateTimeFormatterBuilder_t;
 
-void padNext_(lua_State *L, DateTimeFormatterBuilder_t active, int padWidth, char padChar)
+long triple_shift(long n, int s)
 {
-    if (padWidth < 1)
-    {
-        luaL_error(L, "The pad width must be at least one but was %d", padWidth);
-    }
-    active.padNextWidth = padWidth;
-    active.padNextChar = padChar;
-    active.valueParserIndex = -1;
-}
-void padNext(lua_State *L, DateTimeFormatterBuilder_t active, int padWidth)
-{
-    padNext_(L, active, padWidth, ' ');
+    return n >= 0 ? n >> s : (n >> s) + (2 << ~s);
 }
 
-void parseField(lua_State *L, char cur, int count, temporal_field_t field)
+void encode(lua_State *L, int tag, int length, luaL_Buffer *buffer)
 {
-    // bool standalone = false;
-    switch (cur)
+    if (tag == PATTERN_ISO_ZONE && length >= 4)
     {
-    case 'u':
-    case 'y':
-        if (count == 2)
-        {
-            tm_t ReducedPrinterParser_BASE_DATE;
-            ReducedPrinterParser_BASE_DATE.tm_year = 2000;
-            ReducedPrinterParser_BASE_DATE.tm_mon = 1;
-            ReducedPrinterParser_BASE_DATE.tm_mday = 1;
-            appendValueReduced(field, 2, 2, ReducedPrinterParser_BASE_DATE);
-        }
-        else if (count < 4)
-        {
-            appendValue(field, count, 19, NORMAL);
-        }
-        else
-        {
-            appendValue(field, count, 19, EXCEEDS_PAD);
-        }
-        break;
-    case 'c':
-        if (count == 1)
-        {
-            appendValue(WeekBasedFieldPrinterParser(cur, count, count, count));
-            break;
-        }
-        else if (count == 2)
-        {
-            luaL_error(L, "Invalid pattern \"cc\"");
-        }
-        /*fallthrough*/
-    case 'L':
-    case 'q':
-        // standalone = true;
-        /*fallthrough*/
-    case 'M':
-    case 'Q':
-    case 'E':
-    case 'e':
-        switch (count)
-        {
-        case 1:
-        case 2:
-            if (cur == 'e')
-            {
-                appendValue(WeekBasedFieldPrinterParser(cur, count, count, count));
-            }
-            else if (cur == 'E')
-            {
-                appendText(field, textstyle_SHORT);
-            }
-            else
-            {
-                if (count == 1)
-                {
-                    appendValue(field);
-                }
-                else
-                {
-                    appendValue(field, 2);
-                }
-            }
-            break;
-        case 3:
-            // appendText(field, standalone ? TextStyle.SHORT_STANDALONE : TextStyle.SHORT);
-            appendText(field, textstyle_SHORT);
-            break;
-        case 4:
-            // appendText(field, standalone ? TextStyle.FULL_STANDALONE : TextStyle.FULL);
-            appendText(field, textstyle_FULL);
-            break;
-        case 5:
-            // appendText(field, standalone ? TextStyle.NARROW_STANDALONE : TextStyle.NARROW);
-            appendText(field, textstyle_NARROW);
-            break;
-        default:
-            luaL_error(L, "Too many pattern letters: %c", cur);
-        }
-        break;
-    case 'a':
-        if (count == 1)
-        {
-            appendText(field, textstyle_SHORT);
-        }
-        else
-        {
-            luaL_error(L, "Too many pattern letters: %c", cur);
-        }
-        break;
-    case 'G':
-        switch (count)
-        {
-        case 1:
-        case 2:
-        case 3:
-            appendText(field, textstyle_SHORT);
-            break;
-        case 4:
-            appendText(field, textstyle_FULL);
-            break;
-        case 5:
-            appendText(field, textstyle_NARROW);
-            break;
-        default:
-            luaL_error(L, "Too many pattern letters: %c", cur);
-        }
-        break;
-    case 'S':
-        appendFraction(temporal_field_NANO_OF_SECOND(), count, count, false);
-        break;
-    case 'F':
-        if (count == 1)
-        {
-            appendValue(field);
-        }
-        else
-        {
-            luaL_error(L, "Too many pattern letters: %c", cur);
-        }
-        break;
-    case 'd':
-    case 'h':
-    case 'H':
-    case 'k':
-    case 'K':
-    case 'm':
-    case 's':
-        if (count == 1)
-        {
-            appendValue(field);
-        }
-        else if (count == 2)
-        {
-            appendValue(field, count);
-        }
-        else
-        {
-            luaL_error(L, "Too many pattern letters: %c", cur);
-        }
-        break;
-    case 'D':
-        if (count == 1)
-        {
-            appendValue(field);
-        }
-        else if (count == 2 || count == 3)
-        {
-            appendValue(field, count, 3, NOT_NEGATIVE);
-        }
-        else
-        {
-            luaL_error(L, "Too many pattern letters: " + cur);
-        }
-        break;
-    case 'g':
-        appendValue(field, count, 19, NORMAL);
-        break;
-    case 'A':
-    case 'n':
-    case 'N':
-        appendValue(field, count, 19, NOT_NEGATIVE);
-        break;
-    default:
-        if (count == 1)
-        {
-            appendValue(field);
-        }
-        else
-        {
-            appendValue(field, count);
-        }
-        break;
+        luaL_error(L, "invalid ISO 8601 format: length=%d", length);
+    }
+    if (length < 255)
+    {
+        luaL_addchar(buffer, (char)(tag << 8 | length));
+    }
+    else
+    {
+        luaL_addchar(buffer, (char)((tag << 8) | 0xff));
+        luaL_addchar(buffer, (char)triple_shift(length, 16));
+        luaL_addchar(buffer, (char)(length & 0xffff));
     }
 }
 
-void parsePattern(lua_State *L, const char *pattern, DateTimeFormatterBuilder_t active)
+int compile(lua_State *L, const char *pattern)
 {
-    int pattern_length = strlen(pattern);
+    int length = strlen(pattern);
 
-    for (int pos = 0; pos < pattern_length; pos++)
+    bool inQuote = false;
+
+    lua_State *S = lua_newthread(L);
+    luaL_Buffer *tmpBuffer = NULL;
+
+    luaL_Buffer *compiledCode = (luaL_Buffer *)malloc(sizeof(luaL_Buffer)); // new StringBuilder(length * 2);
+    luaL_buffinitsize(L, compiledCode, length * 2);
+
+    int count = 0, tagcount = 0;
+    int lastTag = -1, prevTag = -1;
+
+    for (int i = 0; i < length; i++)
     {
-        char cur = pattern[pos];
-        if ((cur >= 'A' && cur <= 'Z') || (cur >= 'a' && cur <= 'z'))
+        char c = pattern[i];
+
+        if (c == '\'')
         {
-            int start = pos++;
-            for (; pos < pattern_length && pattern[pos] == cur; pos++)
-                ; // short loop
-            int count = pos - start;
-            // padding
-            if (cur == 'p')
+            // '' is treated as a single quote regardless of being
+            // in a quoted section.
+            if ((i + 1) < length)
             {
-                int pad = 0;
-                if (pos < pattern_length)
+                c = pattern[i + 1];
+                if (c == '\'')
                 {
-                    cur = pattern[pos];
-                    if ((cur >= 'A' && cur <= 'Z') || (cur >= 'a' && cur <= 'z'))
+                    i++;
+                    if (count != 0)
                     {
-                        pad = count;
-                        start = pos++;
-                        for (; pos < pattern_length && pattern[pos] == cur; pos++)
-                            ; // short loop
-                        count = pos - start;
+                        encode(L, lastTag, count, compiledCode);
+                        tagcount++;
+                        prevTag = lastTag;
+                        lastTag = -1;
+                        count = 0;
                     }
-                }
-                if (pad == 0)
-                {
-                    luaL_error(L, "Pad letter 'p' must be followed by valid pad pattern: %s", pattern);
-                }
-                padNext(L, active, pad); // pad and continue parsing
-            }
-            // main rules
-            temporal_field_t field; // FIELD_MAP_get(L, cur);
-            int found = 1;
-            switch (cur)
-            {
-            case 'G':
-                field = temporal_field_ERA();
-                break;
-
-            default:
-                found = 0;
-                break;
-            }
-
-            if (found == 1)
-            {
-                parseField(L, cur, count, field);
-            }
-            else if (cur == 'z')
-            {
-                if (count > 4)
-                {
-                    luaL_error(L, "Too many pattern letters: %c", cur);
-                }
-                else if (count == 4)
-                {
-                    appendZoneText(textstyle_FULL);
-                }
-                else
-                {
-                    appendZoneText(textstyle_SHORT);
-                }
-            }
-            else if (cur == 'V')
-            {
-                if (count != 2)
-                {
-                    luaL_error(L, "Pattern letter count must be 2: %c", cur);
-                }
-                appendZoneId();
-            }
-            else if (cur == 'v')
-            {
-                if (count == 1)
-                {
-                    appendGenericZoneText(textstyle_SHORT);
-                }
-                else if (count == 4)
-                {
-                    appendGenericZoneText(textstyle_FULL);
-                }
-                else
-                {
-                    luaL_error(L, "Wrong number of pattern letters: %c", cur);
-                }
-            }
-            else if (cur == 'Z')
-            {
-                if (count < 4)
-                {
-                    appendOffset("+HHMM", "+0000");
-                }
-                else if (count == 4)
-                {
-                    appendLocalizedOffset(textstyle_FULL);
-                }
-                else if (count == 5)
-                {
-                    appendOffset("+HH:MM:ss", "Z");
-                }
-                else
-                {
-                    luaL_error(L, "Too many pattern letters: %c", cur);
-                }
-            }
-            else if (cur == 'O')
-            {
-                if (count == 1)
-                {
-                    appendLocalizedOffset(textstyle_SHORT);
-                }
-                else if (count == 4)
-                {
-                    appendLocalizedOffset(textstyle_FULL);
-                }
-                else
-                {
-                    luaL_error(L, "Pattern letter count must be 1 or 4: %c", cur);
-                }
-            }
-            else if (cur == 'X')
-            {
-                if (count > 5)
-                {
-                    luaL_error(L, "Too many pattern letters: %c", cur);
-                }
-                appendOffset(PATTERNS[count + (count == 1 ? 0 : 1)], "Z");
-            }
-            else if (cur == 'x')
-            {
-                if (count > 5)
-                {
-                    luaL_error(L, "Too many pattern letters: %c", cur);
-                }
-                const char *zero = (count == 1 ? "+00" : (count % 2 == 0 ? "+0000" : "+00:00"));
-                appendOffset(PATTERNS[count + (count == 1 ? 0 : 1)], zero);
-            }
-            else if (cur == 'W')
-            {
-                // Fields defined by Locale
-                if (count > 1)
-                {
-                    luaL_error(L, "Too many pattern letters: %c", cur);
-                }
-                appendValue(WeekBasedFieldPrinterParser(cur, count, count, count));
-            }
-            else if (cur == 'w')
-            {
-                // Fields defined by Locale
-                if (count > 2)
-                {
-                    luaL_error(L, "Too many pattern letters: %c", cur);
-                }
-                appendValue(WeekBasedFieldPrinterParser(cur, count, count, 2));
-            }
-            else if (cur == 'Y')
-            {
-                // Fields defined by Locale
-                if (count == 2)
-                {
-                    appendValue(WeekBasedFieldPrinterParser(cur, count, count, 2));
-                }
-                else
-                {
-                    appendValue(WeekBasedFieldPrinterParser(cur, count, count, 19));
-                }
-            }
-            else if (cur == 'B')
-            {
-                switch (count)
-                {
-                case 1:
-                    appendDayPeriodText(textstyle_SHORT);
-                    break;
-                case 4:
-                    appendDayPeriodText(textstyle_FULL);
-                    break;
-                case 5:
-                    appendDayPeriodText(textstyle_NARROW);
-                    break;
-                default:
-                    luaL_error(L, "Wrong number of pattern letters: %c", cur);
-                }
-            }
-            else
-            {
-                luaL_error(L, "Unknown pattern letter: %c", cur);
-            }
-            pos--;
-        }
-        else if (cur == '\'')
-        {
-            // parse literals
-            int start = pos++;
-            for (; pos < pattern_length; pos++)
-            {
-                if (pattern[pos] == '\'')
-                {
-                    if (pos + 1 < pattern_length && pattern[pos + 1] == '\'')
+                    if (inQuote)
                     {
-                        pos++;
+                        luaL_addchar(tmpBuffer, c);
                     }
                     else
                     {
-                        break; // end of literal
+                        luaL_addchar(compiledCode, (char)(TAG_QUOTE_ASCII_CHAR << 8 | c));
                     }
+                    continue;
                 }
             }
-            if (pos >= pattern_length)
+            if (!inQuote)
             {
-                luaL_error(L, "Pattern ends with an incomplete string literal: %s", pattern);
-            }
-
-            // char *str = pattern.substring(start + 1, pos);
-            int n = pos - (start + 1);
-
-            if (n < 1) // str.isEmpty()
-            {
-                appendLiteral('\'');
+                if (count != 0)
+                {
+                    encode(L, lastTag, count, compiledCode);
+                    tagcount++;
+                    prevTag = lastTag;
+                    lastTag = -1;
+                    count = 0;
+                }
+                if (tmpBuffer == NULL)
+                {
+                    tmpBuffer = (luaL_Buffer *)malloc(sizeof(luaL_Buffer)); // new StringBuilder(length);
+                    luaL_buffinitsize(S, tmpBuffer, length);
+                }
+                else
+                {
+                    luaL_buffsub(tmpBuffer, luaL_bufflen(tmpBuffer)); // tmpBuffer.setLength(0);
+                    assert(luaL_bufflen(tmpBuffer) == 0);
+                }
+                inQuote = true;
             }
             else
             {
-                char *str = (char *)malloc(sizeof(char) * (n + 1));
-                strncpy(str, pattern + (start + 1), n);
-                str[n] = '\0';
-
-                // str.replace("''", "'")
-                char *replaced = replace_consecutive_quotes(str);
-                appendLiteral(replaced);
-
-                free(replaced);
-                free(str);
+                int len = luaL_bufflen(tmpBuffer);
+                if (len == 1)
+                {
+                    char ch = luaL_buffaddr(tmpBuffer)[0];
+                    if (ch < 128)
+                    {
+                        luaL_addchar(compiledCode, (char)(TAG_QUOTE_ASCII_CHAR << 8 | ch));
+                    }
+                    else
+                    {
+                        luaL_addchar(compiledCode, (char)(TAG_QUOTE_CHARS << 8 | 1));
+                        luaL_addchar(compiledCode, ch);
+                    }
+                }
+                else
+                {
+                    encode(L, TAG_QUOTE_CHARS, len, compiledCode);
+                    luaL_addstring(compiledCode, luaL_buffaddr(tmpBuffer));
+                }
+                inQuote = false;
             }
+            continue;
         }
-        else if (cur == '[')
+        if (inQuote)
         {
-            optionalStart();
+            luaL_addchar(tmpBuffer, c);
+            continue;
         }
-        else if (cur == ']')
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
         {
-            if (active.parent == NULL)
+            if (count != 0)
             {
-                luaL_error(L, "Pattern invalid as it contains ] without previous [");
+                encode(L, lastTag, count, compiledCode);
+                tagcount++;
+                prevTag = lastTag;
+                lastTag = -1;
+                count = 0;
             }
-            optionalEnd();
+            if (c < 128)
+            {
+                // In most cases, c would be a delimiter, such as ':'.
+                luaL_addchar(compiledCode, (char)(TAG_QUOTE_ASCII_CHAR << 8 | c));
+            }
+            else
+            {
+                // Take any contiguous non-ASCII alphabet characters and
+                // put them in a single TAG_QUOTE_CHARS.
+                int j;
+                for (j = i + 1; j < length; j++)
+                {
+                    char d = pattern[j];
+                    if (d == '\'' || ((d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z')))
+                    {
+                        break;
+                    }
+                }
+                encode(L, TAG_QUOTE_CHARS, j - i, compiledCode);
+                for (; i < j; i++)
+                {
+                    luaL_addchar(compiledCode, pattern[i]);
+                }
+                i--;
+            }
+            continue;
         }
-        else if (cur == '{' || cur == '}' || cur == '#')
+
+        int tag = strchr(patternChars, c) - patternChars;
+        if (tag < 0)
         {
-            luaL_error(L, "Pattern includes reserved character: '%c", cur + "'");
+            luaL_error(L, "Illegal pattern character '%c'", c);
         }
-        else
+        if (lastTag == -1 || lastTag == tag)
         {
-            appendLiteral(cur);
+            lastTag = tag;
+            count++;
+            continue;
         }
+        encode(L, lastTag, count, compiledCode);
+        tagcount++;
+        prevTag = lastTag;
+        lastTag = tag;
+        count = 1;
     }
+
+    if (inQuote)
+    {
+        luaL_error(L, "Unterminated quote");
+    }
+
+    if (count != 0)
+    {
+        encode(L, lastTag, count, compiledCode);
+        tagcount++;
+        prevTag = lastTag;
+    }
+
+    bool forceStandaloneForm = (tagcount == 1 && prevTag == PATTERN_MONTH);
+
+    luaL_pushresultsize(compiledCode, length * 2); // leave the final string on the stack.
+    lua_pushboolean(L, forceStandaloneForm);
+
+    free(compiledCode);
+    free(tmpBuffer);
+
+    lua_closethread(S, L);
+
+    return 2;
 }
 
-int l_ofPattern(lua_State *L)
+int l_compile(lua_State *L)
 {
     const char *pattern = lua_tostring(L, 1);
-    DateTimeFormatterBuilder_t builder;
-    builder.parent = NULL;
-    builder.optional = 0;
-    builder.valueParserIndex = -1;
-    builder.active = &builder;
-
-    parsePattern(L, pattern, builder);
-
-    return 0;
+    return compile(L, pattern);
 }
 
-const struct luaL_Reg libc[] = {
-    {"ofPattern", l_ofPattern},
+const struct luaL_Reg lib[] = {
+    {"compile", l_compile},
 
     {NULL, NULL} /* sentinel */
 };
 
-int luaopen_liblibc(lua_State *L)
+int luaopen_libdatetimeformatter(lua_State *L)
 {
-    luaL_newlib(L, libc);
+    luaL_newlib(L, lib);
 
     return 1;
 }
