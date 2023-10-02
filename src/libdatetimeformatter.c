@@ -8,6 +8,7 @@
 #include <lauxlib.h>
 #include <time.h>
 #include <math.h>
+#include <locale.h>
 
 #define Long_MAX_VALUE 0x7fffffffffffffffL
 #define NANOS_PER_SECOND 1000000000L
@@ -642,7 +643,6 @@ static calendar_t PATTERN_INDEX_TO_CALENDAR_FIELD[] = {
     ZONE_OFFSET,
     MONTH};
 
-
 typedef enum SignStyle
 {
 
@@ -685,7 +685,6 @@ typedef enum SignStyle
      */
     EXCEEDS_PAD,
 } signstyle_t;
-
 
 long triple_shift(long n, int s)
 {
@@ -1391,8 +1390,7 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
         {
             if (value == 0)
             {
-                zeroPaddingNumber(L, calendar_getMaximum(HOUR_OF_DAY) + 1,
-                                  count, maxIntCount, buffer);
+                zeroPaddingNumber(L, calendar_getMaximum(HOUR_OF_DAY) + 1, count, maxIntCount, buffer);
             }
             else
             {
@@ -1569,13 +1567,10 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
     // formatted(fieldID, f, f, beginOffset, luaL_bufflen(buffer), buffer);
 }
 
-int format(lua_State *L, const char *compiledPattern, int date_table_index)
+int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table_index)
 {
     luaL_Buffer toAppendTo;
     luaL_buffinit(L, &toAppendTo);
-
-    // Convert input date to time field list
-    // calendar.setTime(date);
 
     int length = strlen(compiledPattern);
     for (int i = 0; i < length;)
@@ -1612,7 +1607,16 @@ int format(lua_State *L, const char *compiledPattern, int date_table_index)
 int l_format(lua_State *L)
 {
     const char *pattern = lua_tostring(L, 1);
-    return format(L, pattern, lua_gettop(L)); // the date table has to be the last argument, period.
+    time_t timer = lua_tointeger(L, 2);
+    const char *locale = lua_tostring(L, 3);
+
+    char *localization = setlocale(LC_TIME, locale);
+    if (localization == NULL)
+        luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
+
+    tm_t *info = localtime(&timer);
+
+    return format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
 }
 
 const struct luaL_Reg lib[] = {
@@ -1621,6 +1625,52 @@ const struct luaL_Reg lib[] = {
 
     {NULL, NULL} /* sentinel */
 };
+
+void calendar_fields(lua_State *L)
+{
+    lua_newtable(L);
+
+    lua_pushinteger(L, ERA);
+    lua_setfield(L, -2, "ERA");
+    lua_pushinteger(L, YEAR);
+    lua_setfield(L, -2, "YEAR");
+    lua_pushinteger(L, MONTH);
+    lua_setfield(L, -2, "MONTH");
+    lua_pushinteger(L, DATE);
+    lua_setfield(L, -2, "DATE");
+    lua_pushinteger(L, HOUR_OF_DAY);
+    lua_setfield(L, -2, "HOUR_OF_DAY");
+    lua_pushinteger(L, MINUTE);
+    lua_setfield(L, -2, "MINUTE");
+    lua_pushinteger(L, SECOND);
+    lua_setfield(L, -2, "SECOND");
+    lua_pushinteger(L, MILLISECOND);
+    lua_setfield(L, -2, "MILLISECOND");
+    lua_pushinteger(L, DAY_OF_WEEK);
+    lua_setfield(L, -2, "DAY_OF_WEEK");
+    lua_pushinteger(L, DAY_OF_YEAR);
+    lua_setfield(L, -2, "DAY_OF_YEAR");
+    lua_pushinteger(L, DAY_OF_WEEK_IN_MONTH);
+    lua_setfield(L, -2, "DAY_OF_WEEK_IN_MONTH");
+    lua_pushinteger(L, WEEK_OF_YEAR);
+    lua_setfield(L, -2, "WEEK_OF_YEAR");
+    lua_pushinteger(L, WEEK_OF_MONTH);
+    lua_setfield(L, -2, "WEEK_OF_MONTH");
+    lua_pushinteger(L, AM_PM);
+    lua_setfield(L, -2, "AM_PM");
+    lua_pushinteger(L, HOUR);
+    lua_setfield(L, -2, "HOUR");
+    lua_pushinteger(L, ZONE_OFFSET);
+    lua_setfield(L, -2, "ZONE_OFFSET");
+    lua_pushinteger(L, WEEK_YEAR);
+    lua_setfield(L, -2, "WEEK_YEAR");
+    lua_pushinteger(L, ISO_DAY_OF_WEEK);
+    lua_setfield(L, -2, "ISO_DAY_OF_WEEK");
+    lua_pushinteger(L, DST_OFFSET);
+    lua_setfield(L, -2, "DST_OFFSET");
+
+    lua_setfield(L, -2, "calendar_fields");
+}
 
 int luaopen_libdatetimeformatter(lua_State *L)
 {
