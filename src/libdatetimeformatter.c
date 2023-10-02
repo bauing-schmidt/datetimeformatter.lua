@@ -56,7 +56,7 @@ char *replace_consecutive_quotes(char *orig)
         i += orig[i] == '\'' && orig[i + 1] == '\'' ? 2 : 1;
     }
 
-    while (j <= n) // fill the remaining cells with the null character, the very last position at index `n` too.
+    while (j <= n) // fill the remaining cells with the NULL character, the very last position at index `n` too.
     {
         replaced[j] = '\0';
         j++;
@@ -665,6 +665,34 @@ typedef enum Calendar
     // LONG_STANDALONE = LONG | STANDALONE_MASK,
 } calendar_t;
 
+#define WEEK_YEAR FIELD_COUNT
+#define ISO_DAY_OF_WEEK 1000
+
+static calendar_t *PATTERN_INDEX_TO_CALENDAR_FIELD = {
+    ERA,
+    YEAR,
+    MONTH,
+    DATE,
+    HOUR_OF_DAY,
+    HOUR_OF_DAY,
+    MINUTE,
+    SECOND,
+    MILLISECOND,
+    DAY_OF_WEEK,
+    DAY_OF_YEAR,
+    DAY_OF_WEEK_IN_MONTH,
+    WEEK_OF_YEAR,
+    WEEK_OF_MONTH,
+    AM_PM,
+    HOUR,
+    HOUR,
+    ZONE_OFFSET,
+    ZONE_OFFSET,
+    WEEK_YEAR,       // Pseudo Calendar field
+    ISO_DAY_OF_WEEK, // Pseudo Calendar field
+    ZONE_OFFSET,
+    MONTH};
+
 typedef struct textstyle_s
 {
     calendar_t calendarStyle;
@@ -1044,8 +1072,578 @@ int l_compile(lua_State *L)
     return compile(L, pattern);
 }
 
+typedef enum DateFormat
+{
+    /**
+     * Useful constant for ERA field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    ERA_FIELD = 0,
+    /**
+     * Useful constant for YEAR field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    YEAR_FIELD = 1,
+    /**
+     * Useful constant for MONTH field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    MONTH_FIELD = 2,
+    /**
+     * Useful constant for DATE field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    DATE_FIELD = 3,
+    /**
+     * Useful constant for one-based HOUR_OF_DAY field alignment.
+     * Used in FieldPosition of date/time formatting.
+     * HOUR_OF_DAY1_FIELD is used for the one-based 24-hour clock.
+     * For example, 23:59 + 01:00 results in 24:59.
+     */
+    HOUR_OF_DAY1_FIELD = 4,
+    /**
+     * Useful constant for zero-based HOUR_OF_DAY field alignment.
+     * Used in FieldPosition of date/time formatting.
+     * HOUR_OF_DAY0_FIELD is used for the zero-based 24-hour clock.
+     * For example, 23:59 + 01:00 results in 00:59.
+     */
+    HOUR_OF_DAY0_FIELD = 5,
+    /**
+     * Useful constant for MINUTE field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    MINUTE_FIELD = 6,
+    /**
+     * Useful constant for SECOND field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    SECOND_FIELD = 7,
+    /**
+     * Useful constant for MILLISECOND field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    MILLISECOND_FIELD = 8,
+    /**
+     * Useful constant for DAY_OF_WEEK field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    DAY_OF_WEEK_FIELD = 9,
+    /**
+     * Useful constant for DAY_OF_YEAR field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    DAY_OF_YEAR_FIELD = 10,
+    /**
+     * Useful constant for DAY_OF_WEEK_IN_MONTH field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    DAY_OF_WEEK_IN_MONTH_FIELD = 11,
+    /**
+     * Useful constant for WEEK_OF_YEAR field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    WEEK_OF_YEAR_FIELD = 12,
+    /**
+     * Useful constant for WEEK_OF_MONTH field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    WEEK_OF_MONTH_FIELD = 13,
+    /**
+     * Useful constant for AM_PM field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    AM_PM_FIELD = 14,
+    /**
+     * Useful constant for one-based HOUR field alignment.
+     * Used in FieldPosition of date/time formatting.
+     * HOUR1_FIELD is used for the one-based 12-hour clock.
+     * For example, 11:30 PM + 1 hour results in 12:30 AM.
+     */
+    HOUR1_FIELD = 15,
+    /**
+     * Useful constant for zero-based HOUR field alignment.
+     * Used in FieldPosition of date/time formatting.
+     * HOUR0_FIELD is used for the zero-based 12-hour clock.
+     * For example, 11:30 PM + 1 hour results in 00:30 AM.
+     */
+    HOUR0_FIELD = 16,
+    /**
+     * Useful constant for TIMEZONE field alignment.
+     * Used in FieldPosition of date/time formatting.
+     */
+    TIMEZONE_FIELD = 17,
+} dateformat_t;
+
+static const dateformat_t *PATTERN_INDEX_TO_DATE_FORMAT_FIELD = {
+    ERA_FIELD,
+    YEAR_FIELD,
+    MONTH_FIELD,
+    DATE_FIELD,
+    HOUR_OF_DAY1_FIELD,
+    HOUR_OF_DAY0_FIELD,
+    MINUTE_FIELD,
+    SECOND_FIELD,
+    MILLISECOND_FIELD,
+    DAY_OF_WEEK_FIELD,
+    DAY_OF_YEAR_FIELD,
+    DAY_OF_WEEK_IN_MONTH_FIELD,
+    WEEK_OF_YEAR_FIELD,
+    WEEK_OF_MONTH_FIELD,
+    AM_PM_FIELD,
+    HOUR1_FIELD,
+    HOUR0_FIELD,
+    TIMEZONE_FIELD,
+    TIMEZONE_FIELD,
+    YEAR_FIELD,
+    DAY_OF_WEEK_FIELD,
+    TIMEZONE_FIELD,
+    MONTH_FIELD};
+
+typedef struct Field
+{
+    const char *name;
+    calendar_t calendarField;
+} field_t;
+
+static field_t PATTERN_INDEX_TO_DATE_FORMAT_FIELD_ID[] = {
+    {"era", ERA},
+    {"year", YEAR},
+    {"month", MONTH},
+    {"day of month", DAY_OF_MONTH},
+    {"hour of day 1", -1},
+    {"hour of day", HOUR_OF_DAY},
+    {"minute", MINUTE},
+    {"second", SECOND},
+    {"millisecond", MILLISECOND},
+    {"day of week", DAY_OF_WEEK},
+    {"day of year", DAY_OF_YEAR},
+    {"day of week in month", DAY_OF_WEEK_IN_MONTH},
+    {"week of year", WEEK_OF_YEAR},
+    {"week of month", WEEK_OF_MONTH},
+    {"am pm", AM_PM},
+    {"hour 1", -1},
+    {"hour", HOUR},
+    {"time zone", -1},
+    {"time zone", -1},
+    {"year", YEAR},
+    {"day of week", DAY_OF_WEEK},
+    {"time zone", -1},
+    {"month", MONTH}};
+
+void formatted(int fieldID, field_t attr, int value, int start, int end, luaL_Buffer *buffer)
+{
+}
+
+int calendar_get(lua_State *L, int date_table_index, int field)
+{
+    int lua_type = lua_geti(L, date_table_index, field);
+    assert(lua_type == LUA_TNUMBER);
+    int value = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    return value;
+}
+
+sprintf0d(luaL_Buffer *sb, int value, int width)
+{
+    long d = value;
+    if (d < 0)
+    {
+        luaL_addchar(sb, '-');
+        d = -d;
+        --width;
+    }
+    int n = 10;
+    for (int i = 2; i < width; i++)
+    {
+        n *= 10;
+    }
+    for (int i = 1; i < width && d < n; i++)
+    {
+        luaL_addchar(sb, '0');
+        n /= 10;
+    }
+    luaL_addchar(sb, d);
+}
+
+int toISODayOfWeek(int calendarDayOfWeek)
+{
+    return calendarDayOfWeek == SUNDAY ? 7 : calendarDayOfWeek - 1;
+}
+
+void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int count, luaL_Buffer *buffer, bool useDateFormatSymbols)
+{
+    int lua_type;
+
+    int maxIntCount = INT_MAX;
+    char *current = NULL;
+    int beginOffset = luaL_bufflen(buffer);
+
+    int field = PATTERN_INDEX_TO_CALENDAR_FIELD[patternCharIndex];
+    int value;
+    if (field == WEEK_YEAR)
+    {
+        // if (calendar.isWeekDateSupported())
+        lua_type = lua_getfield(L, date_table_index, "isWeekDateSupported");
+        if (lua_type == LUA_TBOOLEAN && lua_toboolean(L, -1))
+        {
+            // value = calendar.getWeekYear();
+            lua_type = lua_getfield(L, date_table_index, "getWeekYear");
+            assert(lua_type == LUA_TNUMBER);
+            value = lua_tointeger(L, -1);
+            lua_pop(L, 1);
+        }
+        else
+        {
+            // use calendar year 'y' instead
+            patternCharIndex = PATTERN_YEAR;
+            field = PATTERN_INDEX_TO_CALENDAR_FIELD[patternCharIndex];
+            value = calendar_get(L, date_table_index, field);
+        }
+        lua_pop(L, 1);
+    }
+    else if (field == ISO_DAY_OF_WEEK)
+    {
+        value = toISODayOfWeek(calendar_get(L, date_table_index, DAY_OF_WEEK));
+    }
+    else
+    {
+        value = calendar_get(L, date_table_index, field);
+    }
+
+    int style = (count >= 4) ? LONG : SHORT;
+    if (!useDateFormatSymbols && field < ZONE_OFFSET && patternCharIndex != PATTERN_MONTH_STANDALONE)
+    {
+        current = calendar.getDisplayName(field, style, locale);
+    }
+
+    // Note: zeroPaddingNumber() assumes that maxDigits is either
+    // 2 or maxIntCount. If we make any changes to this,
+    // zeroPaddingNumber() must be fixed.
+
+    switch (patternCharIndex)
+    {
+    case PATTERN_ERA: // 'G'
+        if (useDateFormatSymbols)
+        {
+            const char **eras = formatData.getEras();
+            if (value < eras.length)
+            {
+                current = eras[value];
+            }
+        }
+        if (current == NULL)
+        {
+            current = "";
+        }
+        break;
+
+    case PATTERN_WEEK_YEAR: // 'Y'
+    case PATTERN_YEAR:      // 'y'
+        if (calendar instanceof GregorianCalendar)
+        {
+            if (count != 2)
+            {
+                zeroPaddingNumber(value, count, maxIntCount, buffer);
+            }
+            else
+            {
+                zeroPaddingNumber(value, 2, 2, buffer);
+            } // clip 1996 to 96
+        }
+        else
+        {
+            if (current == NULL)
+            {
+                zeroPaddingNumber(value, style == LONG ? 1 : count, maxIntCount, buffer);
+            }
+        }
+        break;
+
+    case PATTERN_MONTH: // 'M' (context sensitive)
+        if (useDateFormatSymbols)
+        {
+            const char **months;
+            if (count >= 4)
+            {
+                months = formatData.getMonths();
+                current = months[value];
+            }
+            else if (count == 3)
+            {
+                months = formatData.getShortMonths();
+                current = months[value];
+            }
+        }
+        else
+        {
+            if (count < 3)
+            {
+                current = NULL;
+            }
+            else if (forceStandaloneForm)
+            {
+                current = calendar.getDisplayName(field, style | 0x8000, locale);
+                if (current == NULL)
+                {
+                    current = calendar.getDisplayName(field, style, locale);
+                }
+            }
+        }
+        if (current == NULL)
+        {
+            zeroPaddingNumber(value + 1, count, maxIntCount, buffer);
+        }
+        break;
+
+    case PATTERN_MONTH_STANDALONE: // 'L'
+        assert(current == NULL);
+        if (locale == NULL)
+        {
+            const char **months;
+            if (count >= 4)
+            {
+                months = formatData.getMonths();
+                current = months[value];
+            }
+            else if (count == 3)
+            {
+                months = formatData.getShortMonths();
+                current = months[value];
+            }
+        }
+        else
+        {
+            if (count >= 3)
+            {
+                current = calendar.getDisplayName(field, style | 0x8000, locale);
+            }
+        }
+        if (current == NULL)
+        {
+            zeroPaddingNumber(value + 1, count, maxIntCount, buffer);
+        }
+        break;
+
+    case PATTERN_HOUR_OF_DAY1: // 'k' 1-based.  eg, 23:59 + 1 hour =>> 24:59
+        if (current == NULL)
+        {
+            if (value == 0)
+            {
+                zeroPaddingNumber(calendar.getMaximum(HOUR_OF_DAY) + 1,
+                                  count, maxIntCount, buffer);
+            }
+            else
+            {
+                zeroPaddingNumber(value, count, maxIntCount, buffer);
+            }
+        }
+        break;
+
+    case PATTERN_DAY_OF_WEEK: // 'E'
+        if (useDateFormatSymbols)
+        {
+            const char **weekdays;
+            if (count >= 4)
+            {
+                weekdays = formatData.getWeekdays();
+                current = weekdays[value];
+            }
+            else
+            { // count < 4, use abbreviated form if exists
+                weekdays = formatData.getShortWeekdays();
+                current = weekdays[value];
+            }
+        }
+        break;
+
+    case PATTERN_AM_PM: // 'a'
+        if (useDateFormatSymbols)
+        {
+            const char **ampm = formatData.getAmPmStrings();
+            current = ampm[value];
+        }
+        break;
+
+    case PATTERN_HOUR1: // 'h' 1-based.  eg, 11PM + 1 hour =>> 12 AM
+        if (current == NULL)
+        {
+            if (value == 0)
+            {
+                zeroPaddingNumber(calendar.getLeastMaximum(HOUR) + 1,
+                                  count, maxIntCount, buffer);
+            }
+            else
+            {
+                zeroPaddingNumber(value, count, maxIntCount, buffer);
+            }
+        }
+        break;
+
+    case PATTERN_ZONE_NAME: // 'z'
+        if (current == NULL)
+        {
+            if (formatData.locale == NULL || formatData.isZoneStringsSet)
+            {
+                int zoneIndex =
+                    formatData.getZoneIndex(calendar.getTimeZone().getID());
+                if (zoneIndex == -1)
+                {
+                    value = calendar_get(L, date_table_index, ZONE_OFFSET) +
+                            calendar_get(L, date_table_index, DST_OFFSET);
+                    buffer.append(ZoneInfoFile.toCustomID(value));
+                }
+                else
+                {
+                    int index = (calendar_get(L, date_table_index, DST_OFFSET) == 0) ? 1 : 3;
+                    if (count < 4)
+                    {
+                        // Use the short name
+                        index++;
+                    }
+                    String[][] zoneStrings = formatData.getZoneStringsWrapper();
+                    buffer.append(zoneStrings[zoneIndex][index]);
+                }
+            }
+            else
+            {
+                TimeZone tz = calendar.getTimeZone();
+                bool daylight = (calendar_get(L, date_table_index, DST_OFFSET) != 0);
+                int tzstyle = (count < 4 ? TimeZone.SHORT : TimeZone.LONG);
+                buffer.append(tz.getDisplayName(daylight, tzstyle, formatData.locale));
+            }
+        }
+        break;
+
+    case PATTERN_ZONE_VALUE: // 'Z' ("-/+hhmm" form)
+        value = (calendar_get(L, date_table_index, ZONE_OFFSET) + calendar_get(L, date_table_index, DST_OFFSET)) / 60000;
+
+        int width = 4;
+        if (value >= 0)
+        {
+            luaL_addchar(buffer, '+');
+        }
+        else
+        {
+            width++;
+        }
+
+        int num = (value / 60) * 100 + (value % 60);
+        sprintf0d(buffer, num, width);
+        break;
+
+    case PATTERN_ISO_ZONE: // 'X'
+        value = calendar_get(L, date_table_index, ZONE_OFFSET) + calendar_get(L, date_table_index, DST_OFFSET);
+
+        if (value == 0)
+        {
+            luaL_addchar(buffer, 'Z');
+            break;
+        }
+
+        value /= 60000;
+        if (value >= 0)
+        {
+            luaL_addchar(buffer, '+');
+        }
+        else
+        {
+            luaL_addchar(buffer, '-');
+            value = -value;
+        }
+
+        sprintf0d(buffer, value / 60, 2);
+        if (count == 1)
+        {
+            break;
+        }
+
+        if (count == 3)
+        {
+            luaL_addchar(buffer, ':');
+        }
+        sprintf0d(buffer, value % 60, 2);
+        break;
+
+    default:
+        // case PATTERN_DAY_OF_MONTH:         // 'd'
+        // case PATTERN_HOUR_OF_DAY0:         // 'H' 0-based.  eg, 23:59 + 1 hour =>> 00:59
+        // case PATTERN_MINUTE:               // 'm'
+        // case PATTERN_SECOND:               // 's'
+        // case PATTERN_MILLISECOND:          // 'S'
+        // case PATTERN_DAY_OF_YEAR:          // 'D'
+        // case PATTERN_DAY_OF_WEEK_IN_MONTH: // 'F'
+        // case PATTERN_WEEK_OF_YEAR:         // 'w'
+        // case PATTERN_WEEK_OF_MONTH:        // 'W'
+        // case PATTERN_HOUR0:                // 'K' eg, 11PM + 1 hour =>> 0 AM
+        // case PATTERN_ISO_DAY_OF_WEEK:      // 'u' pseudo field, Monday = 1, ..., Sunday = 7
+        if (current == NULL)
+        {
+            zeroPaddingNumber(value, count, maxIntCount, buffer);
+        }
+        break;
+    } // switch (patternCharIndex)
+
+    if (current != NULL)
+    {
+        luaL_addstring(buffer, current);
+    }
+
+    int fieldID = PATTERN_INDEX_TO_DATE_FORMAT_FIELD[patternCharIndex];
+    field_t f = PATTERN_INDEX_TO_DATE_FORMAT_FIELD_ID[patternCharIndex];
+
+    // formatted(fieldID, f, f, beginOffset, luaL_bufflen(buffer), buffer);
+}
+
+int format(lua_State *L, const char *compiledPattern, bool useDateFormatSymbols, int date_table_index)
+{
+    luaL_Buffer toAppendTo;
+    luaL_buffinit(L, &toAppendTo);
+
+    // Convert input date to time field list
+    // calendar.setTime(date);
+
+    int length = strlen(compiledPattern);
+    for (int i = 0; i < length;)
+    {
+        int tag = triple_shift(compiledPattern[i], 8);
+        int count = compiledPattern[i++] & 0xff;
+        if (count == 255)
+        {
+            count = compiledPattern[i++] << 16;
+            count |= compiledPattern[i++];
+        }
+
+        switch (tag)
+        {
+        case TAG_QUOTE_ASCII_CHAR:
+            luaL_addchar(&toAppendTo, (char)count);
+            break;
+
+        case TAG_QUOTE_CHARS:
+            luaL_addlstring(&toAppendTo, compiledPattern + i, count);
+            i += count;
+            break;
+
+        default:
+            subFormat(L, date_table_index, tag, count, &toAppendTo, useDateFormatSymbols);
+            break;
+        }
+    }
+
+    luaL_pushresult(&toAppendTo);
+    return 1;
+}
+
+int l_format(lua_State *L)
+{
+    const char *pattern = lua_tostring(L, 1);
+    bool useDateFormatSymbols = lua_toboolean(L, 2);
+    return format(L, pattern, useDateFormatSymbols, lua_gettop(L)); // the date table has to be the last argument, period.
+}
+
 const struct luaL_Reg lib[] = {
     {"compile", l_compile},
+    {"format", l_format},
 
     {NULL, NULL} /* sentinel */
 };
