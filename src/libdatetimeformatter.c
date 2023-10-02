@@ -44,53 +44,8 @@
 
 static const char *patternChars = "GyMdkHmsSEDFwWahKzZYuXL";
 
-char *replace_consecutive_quotes(char *orig)
-{
-    int n = strlen(orig);
-    char *replaced = (char *)malloc(sizeof(char) * (n + 1));
-
-    int i = 0, j = 0;
-
-    while (i < n)
-    {
-        replaced[j] = orig[i];
-        j++;
-
-        i += orig[i] == '\'' && orig[i + 1] == '\'' ? 2 : 1;
-    }
-
-    while (j <= n) // fill the remaining cells with the NULL character, the very last position at index `n` too.
-    {
-        replaced[j] = '\0';
-        j++;
-    }
-
-    return replaced;
-}
-
 typedef struct timespec timespec_t;
 typedef struct tm tm_t;
-
-typedef struct valuerange_s
-{
-    long minSmallest;
-    long minLargest;
-    long maxSmallest;
-    long maxLargest;
-} valuerange_t;
-
-valuerange_t ValueRange_of(long min, long max)
-{
-    assert(min > max); //           luaL_error(L, "Minimum value must be less than maximum value");
-
-    valuerange_t v;
-    v.minSmallest = min;
-    v.minLargest = min;
-    v.maxSmallest = max;
-    v.maxLargest = max;
-
-    return v;
-}
 
 timespec_t Duration_ofNanos(long nanos)
 {
@@ -149,12 +104,6 @@ timespec_t Duration_ofSecondsNanoseconds(long seconds, long nanoAdjustment)
 
     return t;
 }
-
-typedef struct item_s
-{
-    lua_State *L;
-    int idx;
-} item_t;
 
 typedef enum Calendar
 {
@@ -693,86 +642,6 @@ static calendar_t PATTERN_INDEX_TO_CALENDAR_FIELD[] = {
     ZONE_OFFSET,
     MONTH};
 
-typedef struct textstyle_s
-{
-    calendar_t calendarStyle;
-    int zoneNameStyleIndex;
-} textstyle_t;
-
-textstyle_t textstyle_FULL = {LONG_FORMAT, 0};
-textstyle_t textstyle_SHORT = {SHORT_FORMAT, 1};
-textstyle_t textstyle_NARROW = {NARROW_FORMAT, 1};
-
-typedef struct temporal_unit_s
-{
-    const char *name;
-    timespec_t duration;
-} temporal_unit_t;
-
-temporal_unit_t temporal_unit_ERAS()
-{
-    temporal_unit_t t;
-    t.name = "Eras";
-    t.duration = Duration_ofSeconds(31556952L * 1000000000L);
-    return t;
-}
-
-temporal_unit_t temporal_unit_FOREVER()
-{
-    temporal_unit_t t;
-    t.name = "Forever";
-    t.duration = Duration_ofSecondsNanoseconds(Long_MAX_VALUE, 999999999L);
-    return t;
-}
-
-temporal_unit_t temporal_unit_NANOS()
-{
-    temporal_unit_t t;
-    t.name = "Nanos";
-    t.duration = Duration_ofNanos(1);
-    return t;
-}
-
-temporal_unit_t temporal_unit_SECONDS()
-{
-    temporal_unit_t t;
-    t.name = "Seconds";
-    t.duration = Duration_ofSeconds(1);
-    return t;
-}
-
-typedef struct temporal_field_s
-{
-    const char *name;
-    temporal_unit_t baseUnit;
-    temporal_unit_t rangeUnit;
-    valuerange_t range;
-    const char *displayNameKey;
-} temporal_field_t;
-
-temporal_field_t temporal_field_ERA()
-{
-    temporal_field_t t;
-
-    t.name = "Era";
-    t.baseUnit = temporal_unit_ERAS();
-    t.rangeUnit = temporal_unit_FOREVER();
-    t.range = ValueRange_of(0, 1);
-    t.displayNameKey = "era";
-
-    return t;
-}
-
-temporal_field_t temporal_field_NANO_OF_SECOND()
-{
-    temporal_field_t t;
-    t.name = "NanoOfSecond";
-    t.baseUnit = temporal_unit_NANOS();
-    t.rangeUnit = temporal_unit_SECONDS();
-    t.range = ValueRange_of(0, 999999999);
-
-    return t;
-}
 
 typedef enum SignStyle
 {
@@ -817,50 +686,6 @@ typedef enum SignStyle
     EXCEEDS_PAD,
 } signstyle_t;
 
-typedef struct WeekBasedFieldPrinterParser_s
-{
-    temporal_field_t *field;
-    int minWidth;
-    int maxWidth;
-    signstyle_t signStyle;
-    int subsequentWidth;
-    char chr;
-    int count;
-} WeekBasedFieldPrinterParser_t;
-
-WeekBasedFieldPrinterParser_t WeekBasedFieldPrinterParser_(char chr, int count, int minWidth, int maxWidth, int subsequentWidth)
-{
-    WeekBasedFieldPrinterParser_t t;
-    t.field = NULL;
-    t.minWidth = minWidth;
-    t.maxWidth = maxWidth;
-    t.signStyle = NOT_NEGATIVE;
-    t.subsequentWidth = subsequentWidth;
-    t.chr = chr;
-    t.count = count;
-
-    return t;
-}
-WeekBasedFieldPrinterParser_t WeekBasedFieldPrinterParser(char chr, int count, int minWidth, int maxWidth)
-{
-    return WeekBasedFieldPrinterParser_(chr, count, minWidth, maxWidth, 0);
-}
-
-typedef struct DateTimeFormatterBuilder_s
-{
-    struct DateTimeFormatterBuilder_s *active;
-    struct DateTimeFormatterBuilder_s *parent;
-    int padNextWidth;
-    /**
-     * The character to pad the next field with.
-     */
-    char padNextChar;
-    /**
-     * The index of the last variable width value parser.
-     */
-    int valueParserIndex;
-    int optional;
-} DateTimeFormatterBuilder_t;
 
 long triple_shift(long n, int s)
 {
