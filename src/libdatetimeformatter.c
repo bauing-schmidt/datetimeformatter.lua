@@ -39,6 +39,9 @@
 #define PATTERN_ISO_ZONE 21
 #define PATTERN_MONTH_STANDALONE 22
 
+#define WEEK_YEAR FIELD_COUNT
+#define ISO_DAY_OF_WEEK 1000
+
 static const char *patternChars = "GyMdkHmsSEDFwWahKzZYuXL";
 
 char *replace_consecutive_quotes(char *orig)
@@ -665,10 +668,7 @@ typedef enum Calendar
     // LONG_STANDALONE = LONG | STANDALONE_MASK,
 } calendar_t;
 
-#define WEEK_YEAR FIELD_COUNT
-#define ISO_DAY_OF_WEEK 1000
-
-static calendar_t *PATTERN_INDEX_TO_CALENDAR_FIELD = {
+static calendar_t PATTERN_INDEX_TO_CALENDAR_FIELD[] = {
     ERA,
     YEAR,
     MONTH,
@@ -1174,65 +1174,65 @@ typedef enum DateFormat
     TIMEZONE_FIELD = 17,
 } dateformat_t;
 
-static const dateformat_t *PATTERN_INDEX_TO_DATE_FORMAT_FIELD = {
-    ERA_FIELD,
-    YEAR_FIELD,
-    MONTH_FIELD,
-    DATE_FIELD,
-    HOUR_OF_DAY1_FIELD,
-    HOUR_OF_DAY0_FIELD,
-    MINUTE_FIELD,
-    SECOND_FIELD,
-    MILLISECOND_FIELD,
-    DAY_OF_WEEK_FIELD,
-    DAY_OF_YEAR_FIELD,
-    DAY_OF_WEEK_IN_MONTH_FIELD,
-    WEEK_OF_YEAR_FIELD,
-    WEEK_OF_MONTH_FIELD,
-    AM_PM_FIELD,
-    HOUR1_FIELD,
-    HOUR0_FIELD,
-    TIMEZONE_FIELD,
-    TIMEZONE_FIELD,
-    YEAR_FIELD,
-    DAY_OF_WEEK_FIELD,
-    TIMEZONE_FIELD,
-    MONTH_FIELD};
+// static const dateformat_t *PATTERN_INDEX_TO_DATE_FORMAT_FIELD = {
+//     ERA_FIELD,
+//     YEAR_FIELD,
+//     MONTH_FIELD,
+//     DATE_FIELD,
+//     HOUR_OF_DAY1_FIELD,
+//     HOUR_OF_DAY0_FIELD,
+//     MINUTE_FIELD,
+//     SECOND_FIELD,
+//     MILLISECOND_FIELD,
+//     DAY_OF_WEEK_FIELD,
+//     DAY_OF_YEAR_FIELD,
+//     DAY_OF_WEEK_IN_MONTH_FIELD,
+//     WEEK_OF_YEAR_FIELD,
+//     WEEK_OF_MONTH_FIELD,
+//     AM_PM_FIELD,
+//     HOUR1_FIELD,
+//     HOUR0_FIELD,
+//     TIMEZONE_FIELD,
+//     TIMEZONE_FIELD,
+//     YEAR_FIELD,
+//     DAY_OF_WEEK_FIELD,
+//     TIMEZONE_FIELD,
+//     MONTH_FIELD};
 
-typedef struct Field
-{
-    const char *name;
-    calendar_t calendarField;
-} field_t;
+// typedef struct Field
+// {
+//     const char *name;
+//     calendar_t calendarField;
+// } field_t;
 
-static field_t PATTERN_INDEX_TO_DATE_FORMAT_FIELD_ID[] = {
-    {"era", ERA},
-    {"year", YEAR},
-    {"month", MONTH},
-    {"day of month", DAY_OF_MONTH},
-    {"hour of day 1", -1},
-    {"hour of day", HOUR_OF_DAY},
-    {"minute", MINUTE},
-    {"second", SECOND},
-    {"millisecond", MILLISECOND},
-    {"day of week", DAY_OF_WEEK},
-    {"day of year", DAY_OF_YEAR},
-    {"day of week in month", DAY_OF_WEEK_IN_MONTH},
-    {"week of year", WEEK_OF_YEAR},
-    {"week of month", WEEK_OF_MONTH},
-    {"am pm", AM_PM},
-    {"hour 1", -1},
-    {"hour", HOUR},
-    {"time zone", -1},
-    {"time zone", -1},
-    {"year", YEAR},
-    {"day of week", DAY_OF_WEEK},
-    {"time zone", -1},
-    {"month", MONTH}};
+// static field_t PATTERN_INDEX_TO_DATE_FORMAT_FIELD_ID[] = {
+//     {"era", ERA},
+//     {"year", YEAR},
+//     {"month", MONTH},
+//     {"day of month", DAY_OF_MONTH},
+//     {"hour of day 1", -1},
+//     {"hour of day", HOUR_OF_DAY},
+//     {"minute", MINUTE},
+//     {"second", SECOND},
+//     {"millisecond", MILLISECOND},
+//     {"day of week", DAY_OF_WEEK},
+//     {"day of year", DAY_OF_YEAR},
+//     {"day of week in month", DAY_OF_WEEK_IN_MONTH},
+//     {"week of year", WEEK_OF_YEAR},
+//     {"week of month", WEEK_OF_MONTH},
+//     {"am pm", AM_PM},
+//     {"hour 1", -1},
+//     {"hour", HOUR},
+//     {"time zone", -1},
+//     {"time zone", -1},
+//     {"year", YEAR},
+//     {"day of week", DAY_OF_WEEK},
+//     {"time zone", -1},
+//     {"month", MONTH}};
 
-void formatted(int fieldID, field_t attr, int value, int start, int end, luaL_Buffer *buffer)
-{
-}
+// void formatted(int fieldID, field_t attr, int value, int start, int end, luaL_Buffer *buffer)
+// {
+// }
 
 int calendar_get(lua_State *L, int date_table_index, int field)
 {
@@ -1243,7 +1243,26 @@ int calendar_get(lua_State *L, int date_table_index, int field)
     return value;
 }
 
-sprintf0d(luaL_Buffer *sb, int value, int width)
+void calendar_getfield_at(lua_State *L, int date_table_index, const char *field, int value, char **current)
+{
+    lua_getfield(L, date_table_index, field);
+    lua_len(L, -1);
+    int length = lua_tointeger(L, -1);
+    int n = 2; // 2 values to pop from the stack.
+
+    if (value < length)
+    {
+        // current = eras[value];
+        int lua_type = lua_geti(L, -2, value + 1);
+        assert(lua_type == LUA_TSTRING);
+        *current = (char *)lua_tostring(L, -1);
+        n++; // one more string to be popped out.
+    }
+
+    lua_pop(L, n);
+}
+
+void sprintf0d(luaL_Buffer *sb, int value, int width)
 {
     long d = value;
     if (d < 0)
@@ -1270,13 +1289,130 @@ int toISODayOfWeek(int calendarDayOfWeek)
     return calendarDayOfWeek == SUNDAY ? 7 : calendarDayOfWeek - 1;
 }
 
-void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int count, luaL_Buffer *buffer, bool useDateFormatSymbols)
+// #define ONE_SECOND 1000;
+// #define ONE_MINUTE 60 * ONE_SECOND
+// #define ONE_HOUR 60 * ONE_MINUTE
+// #define ONE_DAY 24 * ONE_HOUR
+// #define ONE_WEEK 7 * ONE_DAY
+// #define ZONE_OFFSET 14 * ONE_HOUR
+// #define DST_OFFSET 20 * ONE_MINUTE
+
+static const int LEAST_MAX_VALUES[] = {
+    1,         // ERA
+    292269054, // YEAR
+    DECEMBER,  // MONTH
+    52,        // WEEK_OF_YEAR
+    4,         // WEEK_OF_MONTH
+    28,        // DAY_OF_MONTH
+    365,       // DAY_OF_YEAR
+    SATURDAY,  // DAY_OF_WEEK
+    4,         // DAY_OF_WEEK_IN
+    PM,        // AM_PM
+    11,        // HOUR
+    23,        // HOUR_OF_DAY
+    59,        // MINUTE
+    59,        // SECOND
+    999,       // MILLISECOND
+    // ZONE_OFFSET, // ZONE_OFFSET
+    // DST_OFFSET,   // DST_OFFSET (historical least maximum)
+};
+
+static const int MAX_VALUES[] = {
+    1,         // ERA
+    292278994, // YEAR
+    DECEMBER,  // MONTH
+    53,        // WEEK_OF_YEAR
+    6,         // WEEK_OF_MONTH
+    31,        // DAY_OF_MONTH
+    366,       // DAY_OF_YEAR
+    SATURDAY,  // DAY_OF_WEEK
+    6,         // DAY_OF_WEEK_IN
+    PM,        // AM_PM
+    11,        // HOUR
+    23,        // HOUR_OF_DAY
+    59,        // MINUTE
+    59,        // SECOND
+    999,       // MILLISECOND
+    // 14 * ONE_HOUR, // ZONE_OFFSET
+    // 2 * ONE_HOUR   // DST_OFFSET (double summer time)
+};
+
+int calendar_getLeastMaximum(int i) { return LEAST_MAX_VALUES[i]; }
+
+int calendar_getMaximum(int i) { return MAX_VALUES[i]; }
+
+void zeroPaddingNumber(lua_State *L, int value, int minDigits, int maxDigits, luaL_Buffer *buffer)
+{
+    // Optimization for 1, 2 and 4 digit numbers. This should
+    // cover most cases of formatting date/time related items.
+    // Note: This optimization code assumes that maxDigits is
+    // either 2 or Integer.MAX_VALUE (maxIntCount in format()).
+
+    // try
+    {
+        char zeroDigit = 0;
+        if (zeroDigit == 0)
+        {
+            // zeroDigit = ((DecimalFormat)numberFormat).getDecimalFormatSymbols().getZeroDigit();
+            zeroDigit = '0';
+        }
+        if (value >= 0)
+        {
+            if (value < 100 && minDigits >= 1 && minDigits <= 2)
+            {
+                if (value < 10)
+                {
+                    if (minDigits == 2)
+                    {
+                        luaL_addchar(buffer, zeroDigit);
+                    }
+                    luaL_addchar(buffer, (char)(zeroDigit + value));
+                }
+                else
+                {
+                    luaL_addchar(buffer, (char)(zeroDigit + value / 10));
+                    luaL_addchar(buffer, (char)(zeroDigit + value % 10));
+                }
+                return;
+            }
+            else if (value >= 1000 && value < 10000)
+            {
+                if (minDigits == 4)
+                {
+                    luaL_addchar(buffer, (char)(zeroDigit + value / 1000));
+                    value %= 1000;
+                    luaL_addchar(buffer, (char)(zeroDigit + value / 100));
+                    value %= 100;
+                    luaL_addchar(buffer, (char)(zeroDigit + value / 10));
+                    luaL_addchar(buffer, (char)(zeroDigit + value % 10));
+                    return;
+                }
+                if (minDigits == 2 && maxDigits == 2)
+                {
+                    zeroPaddingNumber(L, value % 100, 2, 2, buffer);
+                    return;
+                }
+            }
+        }
+    }
+    // catch (Exception e)
+    // {
+    // }
+
+    // numberFormat.setMinimumIntegerDigits(minDigits);
+    // numberFormat.setMaximumIntegerDigits(maxDigits);
+    // numberFormat.format((long)value, buffer, DontCareFieldPosition.INSTANCE);
+    lua_pushinteger(L, value);
+    luaL_addvalue(buffer);
+}
+
+void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int count, luaL_Buffer *buffer)
 {
     int lua_type;
 
     int maxIntCount = INT_MAX;
     char *current = NULL;
-    int beginOffset = luaL_bufflen(buffer);
+    // int beginOffset = luaL_bufflen(buffer);
 
     int field = PATTERN_INDEX_TO_CALENDAR_FIELD[patternCharIndex];
     int value;
@@ -1311,25 +1447,22 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
     }
 
     int style = (count >= 4) ? LONG : SHORT;
-    if (!useDateFormatSymbols && field < ZONE_OFFSET && patternCharIndex != PATTERN_MONTH_STANDALONE)
-    {
-        current = calendar.getDisplayName(field, style, locale);
-    }
+    // if (!useDateFormatSymbols && field < ZONE_OFFSET && patternCharIndex != PATTERN_MONTH_STANDALONE)
+    // {
+    //     current = calendar.getDisplayName(field, style, locale);
+    // }
 
-    // Note: zeroPaddingNumber() assumes that maxDigits is either
+    // Note: zeroPaddingNumber(L, ) assumes that maxDigits is either
     // 2 or maxIntCount. If we make any changes to this,
-    // zeroPaddingNumber() must be fixed.
+    // zeroPaddingNumber(L, ) must be fixed.
 
     switch (patternCharIndex)
     {
     case PATTERN_ERA: // 'G'
-        if (useDateFormatSymbols)
+        // if (useDateFormatSymbols)
         {
-            const char **eras = formatData.getEras();
-            if (value < eras.length)
-            {
-                current = eras[value];
-            }
+            // const char **eras = formatData.getEras();
+            calendar_getfield_at(L, date_table_index, "getEras", value, &current);
         }
         if (current == NULL)
         {
@@ -1339,128 +1472,134 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
 
     case PATTERN_WEEK_YEAR: // 'Y'
     case PATTERN_YEAR:      // 'y'
-        if (calendar instanceof GregorianCalendar)
+        lua_type = lua_getfield(L, date_table_index, "isGregorianCalendar");
+        if (lua_type == LUA_TBOOLEAN && lua_toboolean(L, -1))
         {
             if (count != 2)
             {
-                zeroPaddingNumber(value, count, maxIntCount, buffer);
+                zeroPaddingNumber(L, value, count, maxIntCount, buffer);
             }
             else
             {
-                zeroPaddingNumber(value, 2, 2, buffer);
+                zeroPaddingNumber(L, value, 2, 2, buffer);
             } // clip 1996 to 96
         }
         else
         {
             if (current == NULL)
             {
-                zeroPaddingNumber(value, style == LONG ? 1 : count, maxIntCount, buffer);
+                zeroPaddingNumber(L, value, style == LONG ? 1 : count, maxIntCount, buffer);
             }
         }
-        break;
-
-    case PATTERN_MONTH: // 'M' (context sensitive)
-        if (useDateFormatSymbols)
-        {
-            const char **months;
-            if (count >= 4)
-            {
-                months = formatData.getMonths();
-                current = months[value];
-            }
-            else if (count == 3)
-            {
-                months = formatData.getShortMonths();
-                current = months[value];
-            }
-        }
-        else
-        {
-            if (count < 3)
-            {
-                current = NULL;
-            }
-            else if (forceStandaloneForm)
-            {
-                current = calendar.getDisplayName(field, style | 0x8000, locale);
-                if (current == NULL)
-                {
-                    current = calendar.getDisplayName(field, style, locale);
-                }
-            }
-        }
-        if (current == NULL)
-        {
-            zeroPaddingNumber(value + 1, count, maxIntCount, buffer);
-        }
+        lua_pop(L, 1);
         break;
 
     case PATTERN_MONTH_STANDALONE: // 'L'
-        assert(current == NULL);
-        if (locale == NULL)
+    case PATTERN_MONTH:            // 'M' (context sensitive)
+        // if (useDateFormatSymbols)
         {
-            const char **months;
             if (count >= 4)
             {
-                months = formatData.getMonths();
-                current = months[value];
+                // months = formatData.getMonths();
+                // current = months[value];
+                calendar_getfield_at(L, date_table_index, "getMonths", value, &current);
             }
             else if (count == 3)
             {
-                months = formatData.getShortMonths();
-                current = months[value];
+                // months = formatData.getShortMonths();
+                // current = months[value];
+                calendar_getfield_at(L, date_table_index, "getShortMonths", value, &current);
             }
         }
-        else
-        {
-            if (count >= 3)
-            {
-                current = calendar.getDisplayName(field, style | 0x8000, locale);
-            }
-        }
+        // else
+        // {
+        //     if (count < 3)
+        //     {
+        //         current = NULL;
+        //     }
+        //     else if (forceStandaloneForm)
+        //     {
+        //         current = calendar.getDisplayName(field, style | 0x8000, locale);
+        //         if (current == NULL)
+        //         {
+        //             current = calendar.getDisplayName(field, style, locale);
+        //         }
+        //     }
+        // }
         if (current == NULL)
         {
-            zeroPaddingNumber(value + 1, count, maxIntCount, buffer);
+            zeroPaddingNumber(L, value + 1, count, maxIntCount, buffer);
         }
         break;
+
+        // case PATTERN_MONTH_STANDALONE: // 'L'
+        //     assert(current == NULL);
+        //     // if (locale == NULL)
+        //     {
+        //         const char **months;
+        //         if (count >= 4)
+        //         {
+        //             months = formatData.getMonths();
+        //             current = months[value];
+        //         }
+        //         else if (count == 3)
+        //         {
+        //             months = formatData.getShortMonths();
+        //             current = months[value];
+        //         }
+        //     }
+        //     // else
+        //     // {
+        //     //     if (count >= 3)
+        //     //     {
+        //     //         current = calendar.getDisplayName(field, style | 0x8000, locale);
+        //     //     }
+        //     // }
+        //     if (current == NULL)
+        //     {
+        //         zeroPaddingNumber(L, value + 1, count, maxIntCount, buffer);
+        //     }
+        //     break;
 
     case PATTERN_HOUR_OF_DAY1: // 'k' 1-based.  eg, 23:59 + 1 hour =>> 24:59
         if (current == NULL)
         {
             if (value == 0)
             {
-                zeroPaddingNumber(calendar.getMaximum(HOUR_OF_DAY) + 1,
+                zeroPaddingNumber(L, calendar_getMaximum(HOUR_OF_DAY) + 1,
                                   count, maxIntCount, buffer);
             }
             else
             {
-                zeroPaddingNumber(value, count, maxIntCount, buffer);
+                zeroPaddingNumber(L, value, count, maxIntCount, buffer);
             }
         }
         break;
 
     case PATTERN_DAY_OF_WEEK: // 'E'
-        if (useDateFormatSymbols)
+        // if (useDateFormatSymbols)
         {
-            const char **weekdays;
             if (count >= 4)
             {
-                weekdays = formatData.getWeekdays();
-                current = weekdays[value];
+                // weekdays = formatData.getWeekdays();
+                // current = weekdays[value];
+                calendar_getfield_at(L, date_table_index, "getWeekdays", value, &current);
             }
             else
             { // count < 4, use abbreviated form if exists
-                weekdays = formatData.getShortWeekdays();
-                current = weekdays[value];
+                // weekdays = formatData.getShortWeekdays();
+                // current = weekdays[value];
+                calendar_getfield_at(L, date_table_index, "getShortWeekdays", value, &current);
             }
         }
         break;
 
     case PATTERN_AM_PM: // 'a'
-        if (useDateFormatSymbols)
+        // if (useDateFormatSymbols)
         {
-            const char **ampm = formatData.getAmPmStrings();
-            current = ampm[value];
+            // const char **ampm = formatData.getAmPmStrings();
+            // current = ampm[value];
+            calendar_getfield_at(L, date_table_index, "getAmPmStrings", value, &current);
         }
         break;
 
@@ -1469,12 +1608,11 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
         {
             if (value == 0)
             {
-                zeroPaddingNumber(calendar.getLeastMaximum(HOUR) + 1,
-                                  count, maxIntCount, buffer);
+                zeroPaddingNumber(L, calendar_getLeastMaximum(HOUR) + 1, count, maxIntCount, buffer);
             }
             else
             {
-                zeroPaddingNumber(value, count, maxIntCount, buffer);
+                zeroPaddingNumber(L, value, count, maxIntCount, buffer);
             }
         }
         break;
@@ -1482,34 +1620,46 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
     case PATTERN_ZONE_NAME: // 'z'
         if (current == NULL)
         {
-            if (formatData.locale == NULL || formatData.isZoneStringsSet)
+            // if (formatData.locale == NULL || formatData.isZoneStringsSet)
+            // {
+            //     int zoneIndex =
+            //         formatData.getZoneIndex(calendar.getTimeZone().getID());
+            //     if (zoneIndex == -1)
+            //     {
+            //         value = calendar_get(L, date_table_index, ZONE_OFFSET) +
+            //                 calendar_get(L, date_table_index, DST_OFFSET);
+            //         buffer.append(ZoneInfoFile.toCustomID(value));
+            //     }
+            //     else
+            //     {
+            //         int index = (calendar_get(L, date_table_index, DST_OFFSET) == 0) ? 1 : 3;
+            //         if (count < 4)
+            //         {
+            //             // Use the short name
+            //             index++;
+            //         }
+            //         String[][] zoneStrings = formatData.getZoneStringsWrapper();
+            //         buffer.append(zoneStrings[zoneIndex][index]);
+            //     }
+            // }
+            // else
             {
-                int zoneIndex =
-                    formatData.getZoneIndex(calendar.getTimeZone().getID());
-                if (zoneIndex == -1)
+                // TimeZone tz = calendar.getTimeZone();
+                // int tzstyle = (count < 4 ? TimeZone.SHORT : TimeZone.LONG);
+                // buffer.append(tz.getDisplayName(daylight, tzstyle, formatData.locale));
+                // bool daylight = (calendar_get(L, date_table_index, DST_OFFSET) != 0);
+
+                char *s;
+                if (count >= 4)
                 {
-                    value = calendar_get(L, date_table_index, ZONE_OFFSET) +
-                            calendar_get(L, date_table_index, DST_OFFSET);
-                    buffer.append(ZoneInfoFile.toCustomID(value));
+
+                    calendar_getfield_at(L, date_table_index, "getTimeZone", 1, &s);
                 }
                 else
                 {
-                    int index = (calendar_get(L, date_table_index, DST_OFFSET) == 0) ? 1 : 3;
-                    if (count < 4)
-                    {
-                        // Use the short name
-                        index++;
-                    }
-                    String[][] zoneStrings = formatData.getZoneStringsWrapper();
-                    buffer.append(zoneStrings[zoneIndex][index]);
+                    calendar_getfield_at(L, date_table_index, "getShortTimeZone", 1, &s);
                 }
-            }
-            else
-            {
-                TimeZone tz = calendar.getTimeZone();
-                bool daylight = (calendar_get(L, date_table_index, DST_OFFSET) != 0);
-                int tzstyle = (count < 4 ? TimeZone.SHORT : TimeZone.LONG);
-                buffer.append(tz.getDisplayName(daylight, tzstyle, formatData.locale));
+                luaL_addstring(buffer, s);
             }
         }
         break;
@@ -1578,7 +1728,7 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
         // case PATTERN_ISO_DAY_OF_WEEK:      // 'u' pseudo field, Monday = 1, ..., Sunday = 7
         if (current == NULL)
         {
-            zeroPaddingNumber(value, count, maxIntCount, buffer);
+            zeroPaddingNumber(L, value, count, maxIntCount, buffer);
         }
         break;
     } // switch (patternCharIndex)
@@ -1588,13 +1738,13 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
         luaL_addstring(buffer, current);
     }
 
-    int fieldID = PATTERN_INDEX_TO_DATE_FORMAT_FIELD[patternCharIndex];
-    field_t f = PATTERN_INDEX_TO_DATE_FORMAT_FIELD_ID[patternCharIndex];
+    // int fieldID = PATTERN_INDEX_TO_DATE_FORMAT_FIELD[patternCharIndex];
+    // field_t f = PATTERN_INDEX_TO_DATE_FORMAT_FIELD_ID[patternCharIndex];
 
     // formatted(fieldID, f, f, beginOffset, luaL_bufflen(buffer), buffer);
 }
 
-int format(lua_State *L, const char *compiledPattern, bool useDateFormatSymbols, int date_table_index)
+int format(lua_State *L, const char *compiledPattern, int date_table_index)
 {
     luaL_Buffer toAppendTo;
     luaL_buffinit(L, &toAppendTo);
@@ -1625,7 +1775,7 @@ int format(lua_State *L, const char *compiledPattern, bool useDateFormatSymbols,
             break;
 
         default:
-            subFormat(L, date_table_index, tag, count, &toAppendTo, useDateFormatSymbols);
+            subFormat(L, date_table_index, tag, count, &toAppendTo);
             break;
         }
     }
@@ -1637,8 +1787,7 @@ int format(lua_State *L, const char *compiledPattern, bool useDateFormatSymbols,
 int l_format(lua_State *L)
 {
     const char *pattern = lua_tostring(L, 1);
-    bool useDateFormatSymbols = lua_toboolean(L, 2);
-    return format(L, pattern, useDateFormatSymbols, lua_gettop(L)); // the date table has to be the last argument, period.
+    return format(L, pattern, lua_gettop(L)); // the date table has to be the last argument, period.
 }
 
 const struct luaL_Reg lib[] = {
