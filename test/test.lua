@@ -5,6 +5,28 @@ local compiled_pattern, standalone = dtf.compile "yyyy.MM.dd G 'at' HH:mm:ss z"
 
 print (compiled_pattern)
 
+print (dtf.tm_t_2_timer {
+
+    hour = 12,
+    isdst = false,
+    mday = 0,
+    min = 08,
+    mon = 7,
+    sec = 56,
+    wday = 0,
+    yday = 0,
+    year = 2001,
+    gmtoff = -700,
+    zone = "PDT",
+})
+
+for k, v in pairs (dtf.timer_2_tm_t (60952043336, false)) do print (k, v) end
+
+print ()
+
+for k, v in pairs (dtf.timer_2_tm_t (os.time(), false)) do print (k, v) end
+
+--[[
 local formatted = dtf.format {
 
     pattern = compiled_pattern,
@@ -48,3 +70,4 @@ local formatted = dtf.format {
 
 }
 
+--]]

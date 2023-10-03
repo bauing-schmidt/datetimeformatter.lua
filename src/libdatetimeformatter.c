@@ -1619,9 +1619,123 @@ int l_format(lua_State *L)
     return format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
 }
 
+int l_mktime(lua_State *L)
+{
+    int lua_type;
+    tm_t info;
+
+    lua_type = lua_getfield(L, 1, "hour");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"hour\" [0,23]");
+    info.tm_hour = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "isdst");
+    luaL_argcheck(L, lua_type == LUA_TBOOLEAN, 1, "Expected an integer for \"isdst\" {-1, 0, 1}");
+    info.tm_isdst = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "mday");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"mday\" [1-31]");
+    info.tm_mday = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "min");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"min\" [0-59]");
+    info.tm_min = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "mon");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"mon\" [1-12]");
+    info.tm_mon = lua_tointeger(L, -1) - 1;
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "sec");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"sec\" [0-60]");
+    info.tm_sec = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "wday");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"wday\" [1-7]");
+    info.tm_wday = lua_tointeger(L, -1) - 1;
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "yday");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"yday\" [1-366]");
+    info.tm_yday = lua_tointeger(L, -1) - 1;
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "year");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"year\" [1900-]");
+    info.tm_year = lua_tointeger(L, -1) - 1900;
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "gmtoff");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"gmtoff\" [0-]");
+    info.tm_gmtoff = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_type = lua_getfield(L, 1, "zone");
+    luaL_argcheck(L, lua_type == LUA_TSTRING, 1, "Expected an integer for \"zone\" [string]");
+    info.tm_zone = lua_tostring(L, -1);
+    lua_pop(L, 1);
+
+    time_t timer = mktime(&info);
+
+    lua_pushinteger(L, timer);
+
+    return 1;
+}
+
+int l_tm_t(lua_State *L)
+{
+    time_t timer = lua_tointeger(L, 1);
+    bool gm = lua_toboolean(L, 2);
+
+    tm_t *info = gm ? gmtime(&timer) : localtime(&timer);
+
+    lua_newtable(L);
+
+    lua_pushinteger(L, info->tm_hour);
+    lua_setfield(L, -2, "hour");
+
+    lua_pushinteger(L, info->tm_isdst);
+    lua_setfield(L, -2, "isdst");
+
+    lua_pushinteger(L, info->tm_mday);
+    lua_setfield(L, -2, "mday");
+
+    lua_pushinteger(L, info->tm_min);
+    lua_setfield(L, -2, "min");
+
+    lua_pushinteger(L, info->tm_mon);
+    lua_setfield(L, -2, "mon");
+
+    lua_pushinteger(L, info->tm_sec);
+    lua_setfield(L, -2, "sec");
+
+    lua_pushinteger(L, info->tm_wday);
+    lua_setfield(L, -2, "wday");
+
+    lua_pushinteger(L, info->tm_yday);
+    lua_setfield(L, -2, "yday");
+
+    lua_pushinteger(L, info->tm_year);
+    lua_setfield(L, -2, "year");
+
+    lua_pushinteger(L, info->tm_gmtoff);
+    lua_setfield(L, -2, "gmtoff");
+
+    lua_pushstring(L, info->tm_zone);
+    lua_setfield(L, -2, "zone");
+
+    return 1;
+}
+
 const struct luaL_Reg lib[] = {
     {"compile", l_compile},
     {"format", l_format},
+    {"tm_t_2_timer", l_mktime},
+    {"timer_2_tm_t", l_tm_t},
 
     {NULL, NULL} /* sentinel */
 };
