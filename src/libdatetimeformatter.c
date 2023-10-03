@@ -10,6 +10,8 @@
 #include <math.h>
 #include <locale.h>
 
+#define STRFTIME_BUFFER_LENGTH 128
+
 #define Long_MAX_VALUE 0x7fffffffffffffffL
 #define NANOS_PER_SECOND 1000000000L
 
@@ -44,6 +46,7 @@
 #define ISO_DAY_OF_WEEK 1000
 
 static const char *patternChars = "GyMdkHmsSEDFwWahKzZYuXL";
+static const char *eras[] = {"BC", "AD"};
 
 typedef struct timespec timespec_t;
 typedef struct tm tm_t;
@@ -686,7 +689,7 @@ typedef enum SignStyle
     EXCEEDS_PAD,
 } signstyle_t;
 
-long triple_shift(long n, int s)
+int triple_shift(int n, int s)
 {
     return n >= 0 ? n >> s : (n >> s) + (2 << ~s);
 }
@@ -719,7 +722,7 @@ int compile(lua_State *L, const char *pattern)
     luaL_Buffer *tmpBuffer = NULL;
 
     luaL_Buffer *compiledCode = (luaL_Buffer *)malloc(sizeof(luaL_Buffer)); // new StringBuilder(length * 2);
-    luaL_buffinitsize(L, compiledCode, length * 2);
+    luaL_buffinit(L, compiledCode);
 
     int count = 0, tagcount = 0;
     int lastTag = -1, prevTag = -1;
@@ -770,7 +773,7 @@ int compile(lua_State *L, const char *pattern)
                 if (tmpBuffer == NULL)
                 {
                     tmpBuffer = (luaL_Buffer *)malloc(sizeof(luaL_Buffer)); // new StringBuilder(length);
-                    luaL_buffinitsize(S, tmpBuffer, length);
+                    luaL_buffinit(S, tmpBuffer);
                 }
                 else
                 {
@@ -832,7 +835,7 @@ int compile(lua_State *L, const char *pattern)
                 for (j = i + 1; j < length; j++)
                 {
                     char d = pattern[j];
-                    if (d == '\'' || ((d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z')))
+                    if ((d == '\'') || ((d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z')))
                     {
                         break;
                     }
@@ -848,6 +851,7 @@ int compile(lua_State *L, const char *pattern)
         }
 
         int tag = strchr(patternChars, c) - patternChars;
+        printf("Looking for %c found at: %d\n", c, tag);
         if (tag < 0)
         {
             luaL_error(L, "Illegal pattern character '%c'", c);
@@ -879,13 +883,14 @@ int compile(lua_State *L, const char *pattern)
 
     bool forceStandaloneForm = (tagcount == 1 && prevTag == PATTERN_MONTH);
 
-    luaL_pushresultsize(compiledCode, length * 2); // leave the final string on the stack.
+    luaL_pushresult(compiledCode); // leave the final string on the stack.
     lua_pushboolean(L, forceStandaloneForm);
 
     free(compiledCode);
-    free(tmpBuffer);
 
+    luaL_pushresult(tmpBuffer);
     lua_closethread(S, L);
+    free(tmpBuffer);
 
     return 2;
 }
@@ -1058,33 +1063,96 @@ typedef enum DateFormat
 // {
 // }
 
-int calendar_get(lua_State *L, int date_table_index, int field)
-{
-    int lua_type = lua_geti(L, date_table_index, field);
-    assert(lua_type == LUA_TNUMBER);
-    int value = lua_tointeger(L, -1);
-    lua_pop(L, 1);
-    return value;
-}
+// int calendar_get(lua_State *L, int date_table_index, int field)
+// {
+//     int lua_type = lua_geti(L, date_table_index, field);
+//     assert(lua_type == LUA_TNUMBER);
+//     int value = lua_tointeger(L, -1);
+//     lua_pop(L, 1);
+//     return value;
+// }
 
-void calendar_getfield_at(lua_State *L, int date_table_index, const char *field, int value, char **current)
+int calendar_get(lua_State *L, tm_t *info, int field)
 {
-    lua_getfield(L, date_table_index, field);
-    lua_len(L, -1);
-    int length = lua_tointeger(L, -1);
-    int n = 2; // 2 values to pop from the stack.
+    int v = -1;
 
-    if (value < length)
+    switch (field)
     {
-        // current = eras[value];
-        int lua_type = lua_geti(L, -2, value + 1);
-        assert(lua_type == LUA_TSTRING);
-        *current = (char *)lua_tostring(L, -1);
-        n++; // one more string to be popped out.
+    case ERA:
+        v = info->tm_year + 1900 >= 0 ? 1 : 0;
+        break;
+    case YEAR:
+        v = info->tm_year + 1900;
+        break;
+    case MONTH:
+        v = info->tm_mon + 1;
+        break;
+    case DATE:
+        luaL_error(L, "DATE calendar field isn't supported.");
+    case HOUR_OF_DAY:
+        v = info->tm_hour;
+        break;
+    case MINUTE:
+        v = info->tm_min;
+        break;
+    case SECOND:
+        v = info->tm_sec;
+        break;
+    case MILLISECOND:
+        luaL_error(L, "MILLISECOND calendar field isn't supported.");
+    case DAY_OF_WEEK:
+        v = info->tm_wday;
+        break;
+    case DAY_OF_YEAR:
+        v = info->tm_yday + 1;
+        break;
+    case DAY_OF_WEEK_IN_MONTH:
+        v = info->tm_mday;
+        break;
+    case WEEK_OF_YEAR:
+        luaL_error(L, "WEEK_OF_YEAR calendar field isn't supported.");
+    case WEEK_OF_MONTH:
+        luaL_error(L, "WEEK_OF_MONTH calendar field isn't supported.");
+    case AM_PM:
+        luaL_error(L, "AM_PM calendar field isn't supported.");
+    case HOUR:
+        v = info->tm_hour;
+        break;
+    case ZONE_OFFSET:
+        v = info->tm_gmtoff;
+        break;
+    case WEEK_YEAR:
+        luaL_error(L, "WEEK_YEAR calendar field isn't supported.");
+    case ISO_DAY_OF_WEEK:
+        v = info->tm_wday + 1;
+        break;
+    case DST_OFFSET:
+        v = info->tm_isdst;
+        break;
+    default:
+        luaL_error(L, "Generic calendar field %d isn't supported.", field);
     }
-
-    lua_pop(L, n);
+    return v;
 }
+
+// void calendar_getfield_at(lua_State *L, int date_table_index, const char *field, int value, char **current)
+// {
+//     lua_getfield(L, date_table_index, field);
+//     lua_len(L, -1);
+//     int length = lua_tointeger(L, -1);
+//     int n = 2; // 2 values to pop from the stack.
+
+//     if (value < length)
+//     {
+//         // current = eras[value];
+//         int lua_type = lua_geti(L, -2, value + 1);
+//         assert(lua_type == LUA_TSTRING);
+//         *current = (char *)lua_tostring(L, -1);
+//         n++; // one more string to be popped out.
+//     }
+
+//     lua_pop(L, n);
+// }
 
 void sprintf0d(luaL_Buffer *sb, int value, int width)
 {
@@ -1230,9 +1298,10 @@ void zeroPaddingNumber(lua_State *L, int value, int minDigits, int maxDigits, lu
     luaL_addvalue(buffer);
 }
 
-void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int count, luaL_Buffer *buffer)
+void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIndex, int count, luaL_Buffer *buffer)
 {
-    int lua_type;
+    // int lua_type;
+    char strftime_buffer[STRFTIME_BUFFER_LENGTH];
 
     int maxIntCount = INT_MAX;
     char *current = NULL;
@@ -1243,34 +1312,34 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
     if (field == WEEK_YEAR)
     {
         // if (calendar.isWeekDateSupported())
-        lua_type = lua_getfield(L, date_table_index, "isWeekDateSupported");
-        if (lua_type == LUA_TBOOLEAN && lua_toboolean(L, -1))
-        {
-            // value = calendar.getWeekYear();
-            lua_type = lua_getfield(L, date_table_index, "getWeekYear");
-            assert(lua_type == LUA_TNUMBER);
-            value = lua_tointeger(L, -1);
-            lua_pop(L, 1);
-        }
-        else
+        // lua_type = lua_getfield(L, date_table_index, "isWeekDateSupported");
+        // if (lua_type == LUA_TBOOLEAN && lua_toboolean(L, -1))
+        // {
+        //     // value = calendar.getWeekYear();
+        //     lua_type = lua_getfield(L, date_table_index, "getWeekYear");
+        //     assert(lua_type == LUA_TNUMBER);
+        //     value = lua_tointeger(L, -1);
+        //     lua_pop(L, 1);
+        // }
+        // else
         {
             // use calendar year 'y' instead
             patternCharIndex = PATTERN_YEAR;
             field = PATTERN_INDEX_TO_CALENDAR_FIELD[patternCharIndex];
-            value = calendar_get(L, date_table_index, field);
+            value = calendar_get(L, info, field);
         }
-        lua_pop(L, 1);
+        // lua_pop(L, 1);
     }
     else if (field == ISO_DAY_OF_WEEK)
     {
-        value = toISODayOfWeek(calendar_get(L, date_table_index, DAY_OF_WEEK));
+        value = toISODayOfWeek(calendar_get(L, info, DAY_OF_WEEK));
     }
     else
     {
-        value = calendar_get(L, date_table_index, field);
+        value = calendar_get(L, info, field);
     }
 
-    int style = (count >= 4) ? LONG : SHORT;
+    // int style = (count >= 4) ? LONG : SHORT;
     // if (!useDateFormatSymbols && field < ZONE_OFFSET && patternCharIndex != PATTERN_MONTH_STANDALONE)
     // {
     //     current = calendar.getDisplayName(field, style, locale);
@@ -1280,13 +1349,16 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
     // 2 or maxIntCount. If we make any changes to this,
     // zeroPaddingNumber(L, ) must be fixed.
 
+    printf("Processing field %d pattern char index %d\n", field, patternCharIndex);
+
     switch (patternCharIndex)
     {
     case PATTERN_ERA: // 'G'
         // if (useDateFormatSymbols)
         {
             // const char **eras = formatData.getEras();
-            calendar_getfield_at(L, date_table_index, "getEras", value, &current);
+            // calendar_getfield_at(L, date_table_index, "getEras", value, &current);
+            current = eras[value];
         }
         if (current == NULL)
         {
@@ -1296,8 +1368,8 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
 
     case PATTERN_WEEK_YEAR: // 'Y'
     case PATTERN_YEAR:      // 'y'
-        lua_type = lua_getfield(L, date_table_index, "isGregorianCalendar");
-        if (lua_type == LUA_TBOOLEAN && lua_toboolean(L, -1))
+        // lua_type = lua_getfield(L, date_table_index, "isGregorianCalendar");
+        // if (lua_type == LUA_TBOOLEAN && lua_toboolean(L, -1))
         {
             if (count != 2)
             {
@@ -1308,14 +1380,14 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
                 zeroPaddingNumber(L, value, 2, 2, buffer);
             } // clip 1996 to 96
         }
-        else
-        {
-            if (current == NULL)
-            {
-                zeroPaddingNumber(L, value, style == LONG ? 1 : count, maxIntCount, buffer);
-            }
-        }
-        lua_pop(L, 1);
+        // else
+        // {
+        //     if (current == NULL)
+        //     {
+        //         zeroPaddingNumber(L, value, style == LONG ? 1 : count, maxIntCount, buffer);
+        //     }
+        // }
+        // lua_pop(L, 1);
         break;
 
     case PATTERN_MONTH_STANDALONE: // 'L'
@@ -1326,13 +1398,18 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
             {
                 // months = formatData.getMonths();
                 // current = months[value];
-                calendar_getfield_at(L, date_table_index, "getMonths", value, &current);
+                // calendar_getfield_at(L, date_table_index, "getMonths", value, &current);
+
+                strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%B", info);
+                current = strftime_buffer;
             }
             else if (count == 3)
             {
                 // months = formatData.getShortMonths();
                 // current = months[value];
-                calendar_getfield_at(L, date_table_index, "getShortMonths", value, &current);
+                // calendar_getfield_at(L, date_table_index, "getShortMonths", value, &current);
+                strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%b", info);
+                current = strftime_buffer;
             }
         }
         // else
@@ -1406,13 +1483,17 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
             {
                 // weekdays = formatData.getWeekdays();
                 // current = weekdays[value];
-                calendar_getfield_at(L, date_table_index, "getWeekdays", value, &current);
+                // calendar_getfield_at(L, date_table_index, "getWeekdays", value, &current);
+                strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%A", info);
+                current = strftime_buffer;
             }
             else
             { // count < 4, use abbreviated form if exists
                 // weekdays = formatData.getShortWeekdays();
                 // current = weekdays[value];
-                calendar_getfield_at(L, date_table_index, "getShortWeekdays", value, &current);
+                // calendar_getfield_at(L, date_table_index, "getShortWeekdays", value, &current);
+                strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%a", info);
+                current = strftime_buffer;
             }
         }
         break;
@@ -1422,7 +1503,9 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
         {
             // const char **ampm = formatData.getAmPmStrings();
             // current = ampm[value];
-            calendar_getfield_at(L, date_table_index, "getAmPmStrings", value, &current);
+            // calendar_getfield_at(L, date_table_index, "getAmPmStrings", value, &current);
+            strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%p", info);
+            current = strftime_buffer;
         }
         break;
 
@@ -1472,40 +1555,44 @@ void subFormat(lua_State *L, int date_table_index, int patternCharIndex, int cou
                 // buffer.append(tz.getDisplayName(daylight, tzstyle, formatData.locale));
                 // bool daylight = (calendar_get(L, date_table_index, DST_OFFSET) != 0);
 
-                char *s;
-                if (count >= 4)
-                {
-
-                    calendar_getfield_at(L, date_table_index, "getTimeZone", 1, &s);
-                }
-                else
-                {
-                    calendar_getfield_at(L, date_table_index, "getShortTimeZone", 1, &s);
-                }
-                luaL_addstring(buffer, s);
+                // char *s;
+                // if (count >= 4)
+                // {
+                //     calendar_getfield_at(L, date_table_index, "getTimeZone", 1, &s);
+                // }
+                // else
+                // {
+                //     calendar_getfield_at(L, date_table_index, "getShortTimeZone", 1, &s);
+                // }
+                strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%Z", info);
+                luaL_addstring(buffer, strftime_buffer);
             }
         }
         break;
 
     case PATTERN_ZONE_VALUE: // 'Z' ("-/+hhmm" form)
-        value = (calendar_get(L, date_table_index, ZONE_OFFSET) + calendar_get(L, date_table_index, DST_OFFSET)) / 60000;
+        // value = (calendar_get(L, info, ZONE_OFFSET) + calendar_get(L, info, DST_OFFSET)) / 60000;
 
-        int width = 4;
-        if (value >= 0)
-        {
-            luaL_addchar(buffer, '+');
-        }
-        else
-        {
-            width++;
-        }
+        // int width = 4;
+        // if (value >= 0)
+        // {
+        //     luaL_addchar(buffer, '+');
+        // }
+        // else
+        // {
+        //     width++;
+        // }
 
-        int num = (value / 60) * 100 + (value % 60);
-        sprintf0d(buffer, num, width);
+        // int num = (value / 60) * 100 + (value % 60);
+        // sprintf0d(buffer, num, width);
+
+        strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%z", info);
+        luaL_addstring(buffer, strftime_buffer);
+
         break;
 
     case PATTERN_ISO_ZONE: // 'X'
-        value = calendar_get(L, date_table_index, ZONE_OFFSET) + calendar_get(L, date_table_index, DST_OFFSET);
+        value = calendar_get(L, info, ZONE_OFFSET) + calendar_get(L, info, DST_OFFSET);
 
         if (value == 0)
         {
@@ -1575,6 +1662,7 @@ int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table
     int length = strlen(compiledPattern);
     for (int i = 0; i < length;)
     {
+        printf("current compiled char %b at index %d\n", compiledPattern[i], i);
         int tag = triple_shift(compiledPattern[i], 8);
         int count = compiledPattern[i++] & 0xff;
         if (count == 255)
@@ -1583,6 +1671,7 @@ int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table
             count |= compiledPattern[i++];
         }
 
+        printf("Switching tag %d\n", tag);
         switch (tag)
         {
         case TAG_QUOTE_ASCII_CHAR:
@@ -1595,7 +1684,7 @@ int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table
             break;
 
         default:
-            subFormat(L, date_table_index, tag, count, &toAppendTo);
+            subFormat(L, date_table_index, info, tag, count, &toAppendTo);
             break;
         }
     }
@@ -1609,6 +1698,8 @@ int l_format(lua_State *L)
     const char *pattern = lua_tostring(L, 1);
     time_t timer = lua_tointeger(L, 2);
     const char *locale = lua_tostring(L, 3);
+
+    printf("Compiled: %s\n", pattern);
 
     char *localization = setlocale(LC_TIME, locale);
     if (localization == NULL)
@@ -1630,7 +1721,7 @@ int l_mktime(lua_State *L)
     lua_pop(L, 1);
 
     lua_type = lua_getfield(L, 1, "isdst");
-    luaL_argcheck(L, lua_type == LUA_TBOOLEAN, 1, "Expected an integer for \"isdst\" {-1, 0, 1}");
+    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"isdst\" {-1, 0, 1}");
     info.tm_isdst = lua_tointeger(L, -1);
     lua_pop(L, 1);
 
@@ -1691,6 +1782,10 @@ int l_tm_t(lua_State *L)
     time_t timer = lua_tointeger(L, 1);
     bool gm = lua_toboolean(L, 2);
 
+    // const char *locale = lua_tostring(L, 3);
+
+    // assert(setlocale(LC_TIME, locale) != NULL);
+
     tm_t *info = gm ? gmtime(&timer) : localtime(&timer);
 
     lua_newtable(L);
@@ -1731,11 +1826,18 @@ int l_tm_t(lua_State *L)
     return 1;
 }
 
+int l_time(lua_State *L)
+{
+    lua_pushinteger(L, time(NULL));
+    return 1;
+}
+
 const struct luaL_Reg lib[] = {
     {"compile", l_compile},
     {"format", l_format},
     {"tm_t_2_timer", l_mktime},
     {"timer_2_tm_t", l_tm_t},
+    {"time", l_time},
 
     {NULL, NULL} /* sentinel */
 };

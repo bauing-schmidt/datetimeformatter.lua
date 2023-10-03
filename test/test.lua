@@ -3,12 +3,15 @@ local dtf = require 'datetimeformatter'
 
 local compiled_pattern, standalone = dtf.compile "yyyy.MM.dd G 'at' HH:mm:ss z"
 
-print (compiled_pattern)
+print (compiled_pattern, compiled_pattern:byte(1, #compiled_pattern))
 
+print (dtf.format (compiled_pattern, dtf.time(), 'it_IT'))
+
+--[[
 print (dtf.tm_t_2_timer {
 
     hour = 12,
-    isdst = false,
+    isdst = 0,
     mday = 0,
     min = 08,
     mon = 7,
@@ -19,14 +22,15 @@ print (dtf.tm_t_2_timer {
     gmtoff = -700,
     zone = "PDT",
 })
+                                     
+for k, v in pairs (dtf.timer_2_tm_t (1696323790, false)) do print (k, v) end
 
-for k, v in pairs (dtf.timer_2_tm_t (60952043336, false)) do print (k, v) end
+print ('Now', dtf.time ())
 
-print ()
-
+print (os.time())
 for k, v in pairs (dtf.timer_2_tm_t (os.time(), false)) do print (k, v) end
 
---[[
+
 local formatted = dtf.format {
 
     pattern = compiled_pattern,
