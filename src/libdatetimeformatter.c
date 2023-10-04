@@ -924,23 +924,20 @@ int l_compile(lua_State *L)
 
     // bool forceStandaloneForm = (tagcount == 1 && prevTag == PATTERN_MONTH);
 
-    free_buffer(tmpBuffer);
-
-    lua_pushlightuserdata(L, compiledCode);
-
     lua_createtable(L, compiledCode->length, 0);
 
     for (int i = 0; i < compiledCode->length; i++)
     {
-        // printf("cp at %d is %hu\n", i, compiledCode->buffer[i]);
-
         lua_pushinteger(L, compiledCode->buffer[i]);
         lua_seti(L, -2, i + 1);
     }
 
     // lua_pushboolean(L, forceStandaloneForm);
 
-    return 2;
+    free_buffer(tmpBuffer);
+    free_buffer(compiledCode);
+
+    return 1;
 }
 
 typedef enum DateFormat
@@ -1695,7 +1692,7 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
     // formatted(fieldID, f, f, beginOffset, luaL_bufflen(buffer), buffer);
 }
 
-int format(lua_State *L, buffer_t *compiledPattern, tm_t *info, int date_table_index)
+void format(lua_State *L, buffer_t *compiledPattern, tm_t *info, int date_table_index)
 {
     luaL_Buffer toAppendTo;
     luaL_buffinit(L, &toAppendTo);
@@ -1733,12 +1730,22 @@ int format(lua_State *L, buffer_t *compiledPattern, tm_t *info, int date_table_i
     }
 
     luaL_pushresult(&toAppendTo);
-    return 1;
 }
 
 int l_format(lua_State *L)
 {
-    buffer_t *pattern = (buffer_t *)lua_touserdata(L, 1);
+    lua_len(L, 1);
+    size_t length = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    buffer_t *pattern = new_buffer(length);
+    for (int i = 0; i < length; i++)
+    {
+        lua_geti(L, 1, i + 1);
+        add_char(pattern, (char_t)lua_tointeger(L, -1));
+        lua_pop(L, 1);
+    }
+
     time_t timer = lua_tointeger(L, 2);
     const char *locale = lua_tostring(L, 3);
 
@@ -1747,7 +1754,11 @@ int l_format(lua_State *L)
 
     tm_t *info = localtime(&timer);
 
-    return format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
+    format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
+
+    free_buffer(pattern);
+
+    return 1;
 }
 
 int l_mktime(lua_State *L)
