@@ -1159,7 +1159,7 @@ int calendar_get(lua_State *L, tm_t *info, int field)
         v = info->tm_hour;
         break;
     case ZONE_OFFSET:
-        v = info->tm_gmtoff;
+        v = 0;
         break;
     case WEEK_YEAR:
         luaL_error(L, "WEEK_YEAR calendar field isn't supported.");
@@ -1749,7 +1749,7 @@ int l_format(lua_State *L)
     time_t timer = lua_tointeger(L, 2);
     const char *locale = lua_tostring(L, 3);
 
-    if (setlocale(LC_TIME, locale) == NULL)
+    if (setlocale(LC_ALL, locale) == NULL)
         luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
 
     tm_t *info = localtime(&timer);
@@ -1811,6 +1811,7 @@ int l_mktime(lua_State *L)
     info.tm_year = lua_tointeger(L, -1) - 1900;
     lua_pop(L, 1);
 
+/*
     lua_type = lua_getfield(L, 1, "gmtoff");
     luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"gmtoff\" [0-]");
     info.tm_gmtoff = lua_tointeger(L, -1);
@@ -1820,7 +1821,7 @@ int l_mktime(lua_State *L)
     luaL_argcheck(L, lua_type == LUA_TSTRING, 1, "Expected an integer for \"zone\" [string]");
     info.tm_zone = lua_tostring(L, -1);
     lua_pop(L, 1);
-
+*/
     time_t timer = mktime(&info);
 
     lua_pushinteger(L, timer);
@@ -1868,11 +1869,13 @@ int l_tm_t(lua_State *L)
     lua_pushinteger(L, info->tm_year);
     lua_setfield(L, -2, "year");
 
+	/*
     lua_pushinteger(L, info->tm_gmtoff);
     lua_setfield(L, -2, "gmtoff");
 
     lua_pushstring(L, info->tm_zone);
     lua_setfield(L, -2, "zone");
+	*/
 
     return 1;
 }
