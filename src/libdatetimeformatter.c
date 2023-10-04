@@ -51,6 +51,8 @@ static const char *eras[] = {"BC", "AD"};
 typedef struct timespec timespec_t;
 typedef struct tm tm_t;
 
+typedef unsigned short char_t;
+
 timespec_t Duration_ofNanos(long nanos)
 {
     long secs = nanos / NANOS_PER_SECOND;
@@ -689,12 +691,55 @@ typedef enum SignStyle
     EXCEEDS_PAD,
 } signstyle_t;
 
+typedef struct buffer_s
+{
+    size_t size;
+    size_t length;
+    char_t *buffer;
+} buffer_t;
+
+buffer_t *new_buffer(size_t size)
+{
+    buffer_t *b = (buffer_t *)malloc(sizeof(buffer_t));
+
+    b->size = size;
+    b->length = 0;
+    b->buffer = (char_t *)malloc(sizeof(char_t) * size);
+
+    return b;
+}
+
+void free_buffer(buffer_t *B)
+{
+    if (B != NULL)
+    {
+        free(B->buffer);
+        free(B);
+    }
+}
+
+void add_char(buffer_t *B, char_t c)
+{
+    assert(B->length < B->size);
+
+    B->buffer[B->length++] = c;
+}
+
+void add_buffer(buffer_t *B, buffer_t *C)
+{
+    int l = C->length;
+    char_t *another = C->buffer;
+
+    for (int i = 0; i < l; i++)
+        add_char(B, another[i]);
+}
+
 int triple_shift(int n, int s)
 {
     return n >= 0 ? n >> s : (n >> s) + (2 << ~s);
 }
 
-void encode(lua_State *L, int tag, int length, luaL_Buffer *buffer)
+void encode(lua_State *L, int tag, int length, buffer_t *buffer)
 {
     if (tag == PATTERN_ISO_ZONE && length >= 4)
     {
@@ -702,30 +747,29 @@ void encode(lua_State *L, int tag, int length, luaL_Buffer *buffer)
     }
     if (length < 255)
     {
-        luaL_addchar(buffer, (char)(tag << 8 | length));
+        add_char(buffer, (char_t)(tag << 8 | length));
     }
     else
     {
-        luaL_addchar(buffer, (char)((tag << 8) | 0xff));
-        luaL_addchar(buffer, (char)triple_shift(length, 16));
-        luaL_addchar(buffer, (char)(length & 0xffff));
+        add_char(buffer, (char_t)((tag << 8) | 0xff));
+        add_char(buffer, (char_t)triple_shift(length, 16));
+        add_char(buffer, (char_t)(length & 0xffff));
     }
 }
 
-int compile(lua_State *L, const char *pattern)
+int l_compile(lua_State *L)
 {
+    const char *pattern = lua_tostring(L, 1);
+
     int length = strlen(pattern);
 
     bool inQuote = false;
 
-    lua_State *S = lua_newthread(L);
-    luaL_Buffer *tmpBuffer = NULL;
-
-    luaL_Buffer *compiledCode = (luaL_Buffer *)malloc(sizeof(luaL_Buffer)); // new StringBuilder(length * 2);
-    luaL_buffinit(L, compiledCode);
+    buffer_t *compiledCode = new_buffer(length * 2); // new StringBuilder(length * 2);
+    buffer_t *tmpBuffer = NULL;
 
     int count = 0, tagcount = 0;
-    int lastTag = -1, prevTag = -1;
+    int lastTag = -1; //, prevTag = -1;
 
     for (int i = 0; i < length; i++)
     {
@@ -733,9 +777,9 @@ int compile(lua_State *L, const char *pattern)
 
         if (c == '\'')
         {
-            // '' is treated as a single quote regardless of being
-            // in a quoted section.
-            if ((i + 1) < length)
+            // '' is treated as a single quote regardless of being in a quoted section.
+            // if ((i + 1) < length)
+            if (i < length - 1)
             {
                 c = pattern[i + 1];
                 if (c == '\'')
@@ -745,17 +789,17 @@ int compile(lua_State *L, const char *pattern)
                     {
                         encode(L, lastTag, count, compiledCode);
                         tagcount++;
-                        prevTag = lastTag;
+                        // prevTag = lastTag;
                         lastTag = -1;
                         count = 0;
                     }
                     if (inQuote)
                     {
-                        luaL_addchar(tmpBuffer, c);
+                        add_char(tmpBuffer, (char_t)c);
                     }
                     else
                     {
-                        luaL_addchar(compiledCode, (char)(TAG_QUOTE_ASCII_CHAR << 8 | c));
+                        add_char(compiledCode, (char_t)(TAG_QUOTE_ASCII_CHAR << 8 | c));
                     }
                     continue;
                 }
@@ -766,42 +810,40 @@ int compile(lua_State *L, const char *pattern)
                 {
                     encode(L, lastTag, count, compiledCode);
                     tagcount++;
-                    prevTag = lastTag;
+                    // prevTag = lastTag;
                     lastTag = -1;
                     count = 0;
                 }
                 if (tmpBuffer == NULL)
                 {
-                    tmpBuffer = (luaL_Buffer *)malloc(sizeof(luaL_Buffer)); // new StringBuilder(length);
-                    luaL_buffinit(S, tmpBuffer);
+                    tmpBuffer = new_buffer(length); // new StringBuilder(length);
                 }
                 else
                 {
-                    luaL_buffsub(tmpBuffer, luaL_bufflen(tmpBuffer)); // tmpBuffer.setLength(0);
-                    assert(luaL_bufflen(tmpBuffer) == 0);
+                    tmpBuffer->length = 0; // tmpBuffer.setLength(0);
                 }
                 inQuote = true;
             }
             else
             {
-                int len = luaL_bufflen(tmpBuffer);
+                int len = tmpBuffer->length;
                 if (len == 1)
                 {
-                    char ch = luaL_buffaddr(tmpBuffer)[0];
+                    char_t ch = tmpBuffer->buffer[0];
                     if (ch < 128)
                     {
-                        luaL_addchar(compiledCode, (char)(TAG_QUOTE_ASCII_CHAR << 8 | ch));
+                        add_char(compiledCode, (char_t)(TAG_QUOTE_ASCII_CHAR << 8 | ch));
                     }
                     else
                     {
-                        luaL_addchar(compiledCode, (char)(TAG_QUOTE_CHARS << 8 | 1));
-                        luaL_addchar(compiledCode, ch);
+                        add_char(compiledCode, (char_t)(TAG_QUOTE_CHARS << 8 | 1));
+                        add_char(compiledCode, ch);
                     }
                 }
                 else
                 {
                     encode(L, TAG_QUOTE_CHARS, len, compiledCode);
-                    luaL_addstring(compiledCode, luaL_buffaddr(tmpBuffer));
+                    add_buffer(compiledCode, tmpBuffer);
                 }
                 inQuote = false;
             }
@@ -809,7 +851,7 @@ int compile(lua_State *L, const char *pattern)
         }
         if (inQuote)
         {
-            luaL_addchar(tmpBuffer, c);
+            add_char(tmpBuffer, (char_t)c);
             continue;
         }
         if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
@@ -818,14 +860,14 @@ int compile(lua_State *L, const char *pattern)
             {
                 encode(L, lastTag, count, compiledCode);
                 tagcount++;
-                prevTag = lastTag;
+                // prevTag = lastTag;
                 lastTag = -1;
                 count = 0;
             }
             if (c < 128)
             {
                 // In most cases, c would be a delimiter, such as ':'.
-                luaL_addchar(compiledCode, (char)(TAG_QUOTE_ASCII_CHAR << 8 | c));
+                add_char(compiledCode, (char_t)(TAG_QUOTE_ASCII_CHAR << 8 | c));
             }
             else
             {
@@ -835,7 +877,7 @@ int compile(lua_State *L, const char *pattern)
                 for (j = i + 1; j < length; j++)
                 {
                     char d = pattern[j];
-                    if ((d == '\'') || ((d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z')))
+                    if (d == '\'' || ((d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z')))
                     {
                         break;
                     }
@@ -843,7 +885,7 @@ int compile(lua_State *L, const char *pattern)
                 encode(L, TAG_QUOTE_CHARS, j - i, compiledCode);
                 for (; i < j; i++)
                 {
-                    luaL_addchar(compiledCode, pattern[i]);
+                    add_char(compiledCode, (char_t)pattern[i]);
                 }
                 i--;
             }
@@ -851,7 +893,6 @@ int compile(lua_State *L, const char *pattern)
         }
 
         int tag = strchr(patternChars, c) - patternChars;
-        printf("Looking for %c found at: %d\n", c, tag);
         if (tag < 0)
         {
             luaL_error(L, "Illegal pattern character '%c'", c);
@@ -864,7 +905,7 @@ int compile(lua_State *L, const char *pattern)
         }
         encode(L, lastTag, count, compiledCode);
         tagcount++;
-        prevTag = lastTag;
+        // prevTag = lastTag;
         lastTag = tag;
         count = 1;
     }
@@ -878,27 +919,28 @@ int compile(lua_State *L, const char *pattern)
     {
         encode(L, lastTag, count, compiledCode);
         tagcount++;
-        prevTag = lastTag;
+        // prevTag = lastTag;
     }
 
-    bool forceStandaloneForm = (tagcount == 1 && prevTag == PATTERN_MONTH);
+    // bool forceStandaloneForm = (tagcount == 1 && prevTag == PATTERN_MONTH);
 
-    luaL_pushresult(compiledCode); // leave the final string on the stack.
-    lua_pushboolean(L, forceStandaloneForm);
+    free_buffer(tmpBuffer);
 
-    free(compiledCode);
+    lua_pushlightuserdata(L, compiledCode);
 
-    luaL_pushresult(tmpBuffer);
-    lua_closethread(S, L);
-    free(tmpBuffer);
+    lua_createtable(L, compiledCode->length, 0);
+
+    for (int i = 0; i < compiledCode->length; i++)
+    {
+        // printf("cp at %d is %hu\n", i, compiledCode->buffer[i]);
+
+        lua_pushinteger(L, compiledCode->buffer[i]);
+        lua_seti(L, -2, i + 1);
+    }
+
+    // lua_pushboolean(L, forceStandaloneForm);
 
     return 2;
-}
-
-int l_compile(lua_State *L)
-{
-    const char *pattern = lua_tostring(L, 1);
-    return compile(L, pattern);
 }
 
 typedef enum DateFormat
@@ -1085,10 +1127,11 @@ int calendar_get(lua_State *L, tm_t *info, int field)
         v = info->tm_year + 1900;
         break;
     case MONTH:
-        v = info->tm_mon + 1;
+        v = info->tm_mon;
         break;
     case DATE:
-        luaL_error(L, "DATE calendar field isn't supported.");
+        v = info->tm_mday;
+        break;
     case HOUR_OF_DAY:
         v = info->tm_hour;
         break;
@@ -1107,14 +1150,14 @@ int calendar_get(lua_State *L, tm_t *info, int field)
         v = info->tm_yday + 1;
         break;
     case DAY_OF_WEEK_IN_MONTH:
-        v = info->tm_mday;
-        break;
+        luaL_error(L, "DAY_OF_WEEK_IN_MONTH calendar field isn't supported.");
     case WEEK_OF_YEAR:
         luaL_error(L, "WEEK_OF_YEAR calendar field isn't supported.");
     case WEEK_OF_MONTH:
         luaL_error(L, "WEEK_OF_MONTH calendar field isn't supported.");
     case AM_PM:
-        luaL_error(L, "AM_PM calendar field isn't supported.");
+        v = info->tm_hour < 12 ? 0 : 1;
+        break;
     case HOUR:
         v = info->tm_hour;
         break;
@@ -1173,7 +1216,7 @@ void sprintf0d(luaL_Buffer *sb, int value, int width)
         luaL_addchar(sb, '0');
         n /= 10;
     }
-    luaL_addchar(sb, d);
+    luaL_addchar(sb, (char)d);
 }
 
 int toISODayOfWeek(int calendarDayOfWeek)
@@ -1348,8 +1391,6 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
     // Note: zeroPaddingNumber(L, ) assumes that maxDigits is either
     // 2 or maxIntCount. If we make any changes to this,
     // zeroPaddingNumber(L, ) must be fixed.
-
-    printf("Processing field %d pattern char index %d\n", field, patternCharIndex);
 
     switch (patternCharIndex)
     {
@@ -1576,7 +1617,7 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
         // int width = 4;
         // if (value >= 0)
         // {
-        //     luaL_addchar(buffer, '+');
+        //     add_char(buffer, '+');
         // }
         // else
         // {
@@ -1654,24 +1695,21 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
     // formatted(fieldID, f, f, beginOffset, luaL_bufflen(buffer), buffer);
 }
 
-int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table_index)
+int format(lua_State *L, buffer_t *compiledPattern, tm_t *info, int date_table_index)
 {
     luaL_Buffer toAppendTo;
     luaL_buffinit(L, &toAppendTo);
 
-    int length = strlen(compiledPattern);
-    for (int i = 0; i < length;)
+    for (int i = 0; i < compiledPattern->length;)
     {
-        printf("current compiled char %b at index %d\n", compiledPattern[i], i);
-        int tag = triple_shift(compiledPattern[i], 8);
-        int count = compiledPattern[i++] & 0xff;
+        int tag = triple_shift(compiledPattern->buffer[i], 8);
+        int count = compiledPattern->buffer[i++] & 0xff;
         if (count == 255)
         {
-            count = compiledPattern[i++] << 16;
-            count |= compiledPattern[i++];
+            count = compiledPattern->buffer[i++] << 16;
+            count |= compiledPattern->buffer[i++];
         }
 
-        printf("Switching tag %d\n", tag);
         switch (tag)
         {
         case TAG_QUOTE_ASCII_CHAR:
@@ -1679,7 +1717,12 @@ int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table
             break;
 
         case TAG_QUOTE_CHARS:
-            luaL_addlstring(&toAppendTo, compiledPattern + i, count);
+            // luaL_addlstring(&toAppendTo, (char *)(compiledPattern->buffer + i), count);
+            char_t *shifted = compiledPattern->buffer + i;
+            for (int j = 0; j < count; j++)
+            {
+                luaL_addchar(&toAppendTo, (char)shifted[j]);
+            }
             i += count;
             break;
 
@@ -1695,14 +1738,11 @@ int format(lua_State *L, const char *compiledPattern, tm_t *info, int date_table
 
 int l_format(lua_State *L)
 {
-    const char *pattern = lua_tostring(L, 1);
+    buffer_t *pattern = (buffer_t *)lua_touserdata(L, 1);
     time_t timer = lua_tointeger(L, 2);
     const char *locale = lua_tostring(L, 3);
 
-    printf("Compiled: %s\n", pattern);
-
-    char *localization = setlocale(LC_TIME, locale);
-    if (localization == NULL)
+    if (setlocale(LC_TIME, locale) == NULL)
         luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
 
     tm_t *info = localtime(&timer);

@@ -1,11 +1,13 @@
-
+local op = require 'operator'
 local dtf = require 'datetimeformatter'
 
-local compiled_pattern, standalone = dtf.compile "yyyy.MM.dd G 'at' HH:mm:ss z"
+local compiled_pattern, cp = dtf.compile "yyyy.MM.dd G MMMM 'at hello' HH:mm:ss z"
 
-print (compiled_pattern, compiled_pattern:byte(1, #compiled_pattern))
+-- op.print_table (cp)
 
-print (dtf.format (compiled_pattern, dtf.time(), 'it_IT'))
+-- print (compiled_pattern, compiled_pattern:byte(1, #compiled_pattern))
+
+print (dtf.format (compiled_pattern, dtf.time(), 'en_US'))
 
 --[[
 print (dtf.tm_t_2_timer {
