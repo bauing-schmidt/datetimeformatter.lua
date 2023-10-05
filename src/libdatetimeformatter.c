@@ -1,6 +1,4 @@
 
-#define __USE_XOPEN
-#define __USE_XOPEN2K
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,10 +47,15 @@
 #define ISO_DAY_OF_WEEK 1000
 
 static const char *patternChars = "GyMdkHmsSEDFwWahKzZYuXL";
-static const char *eras[] = {"BC", "AD"};
 
 typedef struct timespec timespec_t;
-typedef struct tm tm_t;
+typedef struct
+{
+    struct tm *tm;
+    int zone_offset;
+    const char *zone_name;
+    int localtime;
+} tm_t;
 
 typedef unsigned short char_t;
 
@@ -1114,9 +1117,10 @@ typedef enum DateFormat
 //     return value;
 // }
 
-int calendar_get(lua_State *L, tm_t *info, int field)
+int calendar_get(lua_State *L, tm_t tm, int field)
 {
     int v = -1;
+    struct tm *info = tm.tm;
 
     switch (field)
     {
@@ -1162,7 +1166,7 @@ int calendar_get(lua_State *L, tm_t *info, int field)
         v = info->tm_hour % 12;
         break;
     case ZONE_OFFSET:
-        v = 0;
+        v = tm.zone_offset;
         break;
     case WEEK_YEAR:
         luaL_error(L, "WEEK_YEAR calendar field isn't supported.");
@@ -1341,8 +1345,9 @@ void zeroPaddingNumber(lua_State *L, int value, int minDigits, int maxDigits, lu
     luaL_addvalue(buffer);
 }
 
-void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIndex, int count, luaL_Buffer *buffer)
+void subFormat(lua_State *L, int date_table_index, tm_t tm, int patternCharIndex, int count, luaL_Buffer *buffer)
 {
+    struct tm *info = tm.tm;
     // int lua_type;
     char strftime_buffer[STRFTIME_BUFFER_LENGTH];
 
@@ -1369,17 +1374,17 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
             // use calendar year 'y' instead
             patternCharIndex = PATTERN_YEAR;
             field = PATTERN_INDEX_TO_CALENDAR_FIELD[patternCharIndex];
-            value = calendar_get(L, info, field);
+            value = calendar_get(L, tm, field);
         }
         // lua_pop(L, 1);
     }
     else if (field == ISO_DAY_OF_WEEK)
     {
-        value = toISODayOfWeek(calendar_get(L, info, DAY_OF_WEEK));
+        value = toISODayOfWeek(calendar_get(L, tm, DAY_OF_WEEK));
     }
     else
     {
-        value = calendar_get(L, info, field);
+        value = calendar_get(L, tm, field);
     }
 
     // int style = (count >= 4) ? LONG : SHORT;
@@ -1399,7 +1404,7 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
         {
             // const char **eras = formatData.getEras();
             // calendar_getfield_at(L, date_table_index, "getEras", value, &current);
-            current = eras[value];
+            // current = eras[value];
         }
         if (current == NULL)
         {
@@ -1605,8 +1610,16 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
                 // {
                 //     calendar_getfield_at(L, date_table_index, "getShortTimeZone", 1, &s);
                 // }
-                strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%Z", info);
-                luaL_addstring(buffer, strftime_buffer);
+
+                if (tm.localtime)
+                {
+                    strftime(strftime_buffer, STRFTIME_BUFFER_LENGTH, "%Z", info);
+                    luaL_addstring(buffer, strftime_buffer);
+                }
+                else
+                {
+                    luaL_addstring(buffer, tm.zone_name);
+                }
             }
         }
         break;
@@ -1633,7 +1646,7 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
         break;
 
     case PATTERN_ISO_ZONE: // 'X'
-        value = calendar_get(L, info, ZONE_OFFSET) + calendar_get(L, info, DST_OFFSET);
+        value = calendar_get(L, tm, ZONE_OFFSET) + calendar_get(L, tm, DST_OFFSET);
 
         if (value == 0)
         {
@@ -1695,7 +1708,7 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
     // formatted(fieldID, f, f, beginOffset, luaL_bufflen(buffer), buffer);
 }
 
-void format(lua_State *L, buffer_t *compiledPattern, tm_t *info, int date_table_index)
+void format(lua_State *L, buffer_t *compiledPattern, tm_t tm, int date_table_index)
 {
     luaL_Buffer toAppendTo;
     luaL_buffinit(L, &toAppendTo);
@@ -1727,7 +1740,7 @@ void format(lua_State *L, buffer_t *compiledPattern, tm_t *info, int date_table_
             break;
 
         default:
-            subFormat(L, date_table_index, info, tag, count, &toAppendTo);
+            subFormat(L, date_table_index, tm, tag, count, &toAppendTo);
             break;
         }
     }
@@ -1751,26 +1764,32 @@ int l_format(lua_State *L)
 
     time_t timer = lua_tointeger(L, 2);
     const char *locale = lua_tostring(L, 3);
-    const char *timezone = lua_tostring(L, 4);
+    lua_Integer offset = lua_tointeger(L, 4);
+    const char *timezone = lua_tostring(L, 5);
+    int local = lua_toboolean(L, 6);
 
     if (setlocale(LC_ALL, locale) == NULL)
         luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
 
-    // const char *old = getenv("TZ");
-    // setenv("TZ", timezone, 1);
+    tm_t tm; //  allocate the main structure to hold all the data.
 
-    tm_t *info = localtime(&timer);
+    tm.zone_name = timezone;
+    tm.zone_offset = offset;
+    tm.localtime = local;
 
-    format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
+    if (local)
+    {
+        tm.tm = localtime(&timer);
+    }
+    else
+    {
+        timer += offset;
+        tm.tm = gmtime(&timer);
+    }
+
+    format(L, pattern, tm, lua_gettop(L)); // the date table has to be the last argument, period.
 
     free_buffer(pattern);
-
-    // unsetenv("TZ");
-
-    // if (old != NULL)
-    // {
-    //     setenv("TZ", old, 1);
-    // }
 
     return 1;
 }
@@ -1778,7 +1797,7 @@ int l_format(lua_State *L)
 int l_mktime(lua_State *L)
 {
     int lua_type;
-    tm_t info;
+    struct tm info;
 
     lua_type = lua_getfield(L, 1, "hour");
     luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"hour\" [0,23]");
@@ -1852,7 +1871,7 @@ int l_tm_t(lua_State *L)
 
     // assert(setlocale(LC_TIME, locale) != NULL);
 
-    tm_t *info = gm ? gmtime(&timer) : localtime(&timer);
+    struct tm *info = gm ? gmtime(&timer) : localtime(&timer);
 
     lua_newtable(L);
 
