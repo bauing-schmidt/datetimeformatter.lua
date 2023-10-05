@@ -1752,7 +1752,9 @@ int l_format(lua_State *L)
     if (setlocale(LC_ALL, locale) == NULL)
         luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
 
-    tm_t *info = localtime(&timer);
+    tm_t *info = gmtime(&timer);
+
+    printf("Parsed: %d hour, %d isdst, %d mday, %d min, %d mon, %d sec, %d wday, %d yday, %d year.\n", info->tm_hour, info->tm_isdst, info->tm_mday, info->tm_min, info->tm_mon, info->tm_sec, info->tm_wday, info->tm_yday, info->tm_year);
 
     format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
 
@@ -1811,17 +1813,17 @@ int l_mktime(lua_State *L)
     info.tm_year = lua_tointeger(L, -1) - 1900;
     lua_pop(L, 1);
 
-/*
-    lua_type = lua_getfield(L, 1, "gmtoff");
-    luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"gmtoff\" [0-]");
-    info.tm_gmtoff = lua_tointeger(L, -1);
-    lua_pop(L, 1);
+    /*
+        lua_type = lua_getfield(L, 1, "gmtoff");
+        luaL_argcheck(L, lua_type == LUA_TNUMBER, 1, "Expected an integer for \"gmtoff\" [0-]");
+        info.tm_gmtoff = lua_tointeger(L, -1);
+        lua_pop(L, 1);
 
-    lua_type = lua_getfield(L, 1, "zone");
-    luaL_argcheck(L, lua_type == LUA_TSTRING, 1, "Expected an integer for \"zone\" [string]");
-    info.tm_zone = lua_tostring(L, -1);
-    lua_pop(L, 1);
-*/
+        lua_type = lua_getfield(L, 1, "zone");
+        luaL_argcheck(L, lua_type == LUA_TSTRING, 1, "Expected an integer for \"zone\" [string]");
+        info.tm_zone = lua_tostring(L, -1);
+        lua_pop(L, 1);
+    */
     time_t timer = mktime(&info);
 
     lua_pushinteger(L, timer);
@@ -1869,13 +1871,13 @@ int l_tm_t(lua_State *L)
     lua_pushinteger(L, info->tm_year);
     lua_setfield(L, -2, "year");
 
-	/*
+    /*
     lua_pushinteger(L, info->tm_gmtoff);
     lua_setfield(L, -2, "gmtoff");
 
     lua_pushstring(L, info->tm_zone);
     lua_setfield(L, -2, "zone");
-	*/
+    */
 
     return 1;
 }
