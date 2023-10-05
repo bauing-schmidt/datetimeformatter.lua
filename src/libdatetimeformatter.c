@@ -1503,11 +1503,11 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
     case PATTERN_HOUR_OF_DAY1: // 'k' 1-based.  eg, 23:59 + 1 hour =>> 24:59
         if (current == NULL)
         {
-            if (value == 0)
-            {
-                zeroPaddingNumber(L, calendar_getMaximum(HOUR_OF_DAY) + 1, count, maxIntCount, buffer);
-            }
-            else
+            // if (value == 0)
+            // {
+            //     zeroPaddingNumber(L, calendar_getMaximum(HOUR_OF_DAY) + 1, count, maxIntCount, buffer);
+            // }
+            // else
             {
                 zeroPaddingNumber(L, value, count, maxIntCount, buffer);
             }
@@ -1550,11 +1550,11 @@ void subFormat(lua_State *L, int date_table_index, tm_t *info, int patternCharIn
     case PATTERN_HOUR1: // 'h' 1-based.  eg, 11PM + 1 hour =>> 12 AM
         if (current == NULL)
         {
-            if (value == 0)
-            {
-                zeroPaddingNumber(L, calendar_getLeastMaximum(HOUR) + 1, count, maxIntCount, buffer);
-            }
-            else
+            // if (value == 0)
+            // {
+            //     zeroPaddingNumber(L, calendar_getLeastMaximum(HOUR) + 1, count, maxIntCount, buffer);
+            // }
+            // else
             {
                 zeroPaddingNumber(L, value, count, maxIntCount, buffer);
             }
