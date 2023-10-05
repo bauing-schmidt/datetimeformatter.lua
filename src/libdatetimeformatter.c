@@ -1156,7 +1156,7 @@ int calendar_get(lua_State *L, tm_t *info, int field)
         v = info->tm_hour < 12 ? 0 : 1;
         break;
     case HOUR:
-        v = info->tm_hour;
+        v = info->tm_hour % 12;
         break;
     case ZONE_OFFSET:
         v = 0;
