@@ -1,4 +1,7 @@
 
+#define __USE_XOPEN
+#define __USE_XOPEN2K
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -1748,17 +1751,46 @@ int l_format(lua_State *L)
 
     time_t timer = lua_tointeger(L, 2);
     const char *locale = lua_tostring(L, 3);
+    const char *timezone = lua_tostring(L, 4);
 
     if (setlocale(LC_ALL, locale) == NULL)
         luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
 
-    tm_t *info = gmtime(&timer);
+    const char *old = getenv("TZ");
+    setenv("TZ", timezone, 1);
 
-    printf("Parsed: %d hour, %d isdst, %d mday, %d min, %d mon, %d sec, %d wday, %d yday, %d year.\n", info->tm_hour, info->tm_isdst, info->tm_mday, info->tm_min, info->tm_mon, info->tm_sec, info->tm_wday, info->tm_yday, info->tm_year);
+    tm_t *info = localtime(&timer);
 
     format(L, pattern, info, lua_gettop(L)); // the date table has to be the last argument, period.
 
     free_buffer(pattern);
+
+    unsetenv("TZ");
+
+    // if (old != NULL)
+    // {
+    //     setenv("TZ", old, 1);
+    // }
+
+    return 1;
+}
+
+int l_strptime(lua_State *L)
+{
+
+    const char *isodate = lua_tostring(L, 1);
+
+    tm_t info;
+
+    // memset(&info, '\0', sizeof(info));
+
+    /* Try the ISO format first.  */
+    // 2023-10-05T09:36:30.153108+02:00
+    strptime(isodate, "%", &info);
+
+    printf("Parsed: %d hour, %d isdst, %d mday, %d min, %d mon, %d sec, %d wday, %d yday, %d year.\n", info.tm_hour, info.tm_isdst, info.tm_mday, info.tm_min, info.tm_mon, info.tm_sec, info.tm_wday, info.tm_yday, info.tm_year);
+
+    lua_pushinteger(L, mktime(&info));
 
     return 1;
 }
@@ -1894,6 +1926,7 @@ const struct luaL_Reg lib[] = {
     {"tm_t_2_timer", l_mktime},
     {"timer_2_tm_t", l_tm_t},
     {"time", l_time},
+    {"strptime", l_strptime},
 
     {NULL, NULL} /* sentinel */
 };
