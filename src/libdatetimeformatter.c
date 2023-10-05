@@ -1756,8 +1756,8 @@ int l_format(lua_State *L)
     if (setlocale(LC_ALL, locale) == NULL)
         luaL_error(L, "Impossible to set the \"%s\" locale.", locale);
 
-    const char *old = getenv("TZ");
-    setenv("TZ", timezone, 1);
+    // const char *old = getenv("TZ");
+    // setenv("TZ", timezone, 1);
 
     tm_t *info = localtime(&timer);
 
@@ -1765,7 +1765,7 @@ int l_format(lua_State *L)
 
     free_buffer(pattern);
 
-    unsetenv("TZ");
+    // unsetenv("TZ");
 
     // if (old != NULL)
     // {
