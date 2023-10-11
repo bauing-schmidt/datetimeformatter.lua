@@ -1,7 +1,7 @@
 
 
 local lambda = require 'operator'
-local libdatetimeformatter = require 'libdatetimeformatter'
+local libdatetimeformatter = require 'libdatetimeformatterlua'
 
 local memo_patterns = {}
 
