@@ -1,0 +1,23 @@
+{
+    "files.associations": {
+        "string": "c",
+        "optional": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "array": "c",
+        "functional": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "variant": "c",
+        "charconv": "c",
+        "chrono": "c",
+        "format": "c",
+        "limits.h": "c",
+        "wchar.h": "c",
+        "uchar.h": "c",
+        "time.h": "c",
+        "libdatetimeformatter.h": "c",
+        "datetimeformatter.h": "c"
+    }
+}

@@ -43,6 +43,39 @@ int l_compile(lua_State *L)
     return 1;
 }
 
+int l_compile_then_format(lua_State *L)
+{
+    char output[ERROR_BUFFER_LENGTH];
+    buffer_t *pattern;
+    int failed;
+
+    const char *str_pattern = lua_tostring(L, 1);
+    time_t timer = lua_tointeger(L, 2);
+    const char *locale = lua_tostring(L, 3);
+    int offset = lua_tointeger(L, 4);
+    const char *timezone = lua_tostring(L, 5);
+    int local = lua_toboolean(L, 6);
+
+    failed = dtf_compile(str_pattern, &pattern, output);
+
+    if (failed)
+    {
+        free_buffer(pattern);
+        luaL_error(L, output);
+    }
+
+    failed = dtf_format(pattern, timer, locale, offset, timezone, local, output);
+
+    free_buffer(pattern);
+
+    if (failed)
+        luaL_error(L, output);
+    else
+        lua_pushstring(L, output);
+
+    return 1;
+}
+
 int l_format(lua_State *L)
 {
     lua_len(L, 1);
@@ -204,6 +237,7 @@ int l_time(lua_State *L)
 const struct luaL_Reg lib[] = {
     {"compile", l_compile},
     {"format", l_format},
+    {"compile_then_format", l_compile_then_format},
     {"tm_t_2_timer", l_mktime},
     {"timer_2_tm_t", l_tm_t},
     {"time", l_time},
