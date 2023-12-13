@@ -255,7 +255,7 @@ void calendar_fields(lua_State *L)
     lua_setfield(L, -2, "YEAR");
     lua_pushinteger(L, MONTH);
     lua_setfield(L, -2, "MONTH");
-    lua_pushinteger(L, DATE);
+    lua_pushinteger(L, df_DATE);
     lua_setfield(L, -2, "DATE");
     lua_pushinteger(L, HOUR_OF_DAY);
     lua_setfield(L, -2, "HOUR_OF_DAY");
