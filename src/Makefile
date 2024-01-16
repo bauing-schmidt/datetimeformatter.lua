@@ -6,7 +6,7 @@ macos:
 	gcc -O2 -g -fPIC -Wall -dynamiclib -o libdatetimeformatterlua.dylib libdatetimeformatterlua.c -llua -ldatetimeformatter
 
 mingw:
-	gcc -O2 -g -fPIC -Wall -shared -o libdatetimeformatterlua.dll libdatetimeformatterlua.c -I/usr/local/include/ -L/usr/local/lib -llua54 -ldatetimeformatter
+	gcc -O2 -g -fPIC -Wall -shared -o libdatetimeformatterlua.dll libdatetimeformatterlua.c -I/ucrt64/include -I/usr/local/include/ -L/usr/local/lib -llua54 -ldatetimeformatter
 
 install:
 	mkdir -p /usr/local/lib/lua/5.4/	# just for ensuring that the dest dir exists
